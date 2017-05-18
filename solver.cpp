@@ -191,6 +191,7 @@ bool VO_SF::loadImageFromSequence(string files_dir, unsigned int index, unsigned
     string name = files_dir + aux;
 
 	cv::Mat color = cv::imread(name.c_str(), CV_LOAD_IMAGE_COLOR);
+    color_full = color;   //passing full image into EF
 
 	if (color.data == NULL)
 	{
@@ -215,6 +216,8 @@ bool VO_SF::loadImageFromSequence(string files_dir, unsigned int index, unsigned
     cv::Mat depth = cv::imread(name, -1);
     cv::Mat depth_float;
     depth.convertTo(depth_float, CV_32FC1, 1.0 / 5000.0);
+    depth.convertTo(depth_full, CV_16U, 1000.0 / 5000.0);
+
 
     for (unsigned int v=0; v<height; v++)
         for (unsigned int u=0; u<width; u++)

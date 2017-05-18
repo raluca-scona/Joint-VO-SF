@@ -8,6 +8,12 @@ endif(COMMAND cmake_policy)
 # custom cmake modules
 LIST(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake_modules)
 
+#some hacking for finding EF from CF - temporary
+message(STATUS ${EFUSION_LIBRARY})
+find_package(efusion REQUIRED)
+find_package(Pangolin 0.1 REQUIRED)
+find_package(CUDA REQUIRED)
+
 #Find dependencies (Eigen is included in MRPT)
 FIND_PACKAGE(MRPT REQUIRED base gui opengl obs)
 FIND_PACKAGE(OpenCV REQUIRED)
@@ -17,6 +23,11 @@ FIND_PACKAGE(TBB REQUIRED)
 INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR})
 INCLUDE_DIRECTORIES(${OpenNI2_INCLUDE_DIRS})
 INCLUDE_DIRECTORIES(${TBB_INCLUDE_DIRS})
+
+#ef
+include_directories(${EFUSION_INCLUDE_DIR})
+include_directories(${Pangolin_INCLUDE_DIRS})
+include_directories(${CUDA_INCLUDE_DIRS})
 
 
 
@@ -38,7 +49,11 @@ TARGET_LINK_LIBRARIES(vo_sf_lib
 	${MRPT_LIBS}
 	${OpenNI2_LIBRARY}
 	${OpenCV_LIBS}
-    ${TBB_LIBRARIES})
+    ${TBB_LIBRARIES}
+    ${EFUSION_LIBRARY}  #more EF stuff here
+    ${Pangolin_LIBRARIES}
+    ${CUDA_LIBRARIES}
+)
 	
 		
 #To run online with an RGB-D camera	
@@ -66,6 +81,6 @@ TARGET_LINK_LIBRARIES(VO-SF-ImageSeq 	vo_sf_lib)
 # Set optimized building:
 IF(CMAKE_COMPILER_IS_GNUCXX)
 	SET(CMAKE_BUILD_TYPE "Release") #I'm not sure if this does anything
-	SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -mtune=native -mavx")
+	SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -mtune=native -mavx -std=c++11")
 ENDIF(CMAKE_COMPILER_IS_GNUCXX)
 

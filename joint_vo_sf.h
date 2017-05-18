@@ -34,6 +34,10 @@
 #include <unsupported/Eigen/MatrixFunctions>
 #include <opencv2/opencv.hpp>
 
+//*** INCLUDES FOR EF
+#include "ElasticFusion.h"
+#include "Shaders/Resize.h"
+#include "GUI.h"
 
 #define NUM_LABELS 24
 
@@ -65,6 +69,13 @@ struct SolveForMotionWorkspace
 
 class VO_SF {
 public:
+
+    //						EF
+    //----------------------------------------------------------------
+    cv::Mat depth_full, color_full;
+    ElasticFusion * eFusion;
+    Resize * resizeStream;
+    GUI * gui;
 
 	//						General
 	//----------------------------------------------------------------
