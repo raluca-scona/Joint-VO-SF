@@ -115,6 +115,7 @@ public:
     void warpImagesParallel();
     void warpImages(cv::Rect region);
 	void warpImagesAccurate();					//Accurate warping (last image towards the prev one)
+    void warpImagesAccurateInverse();
     void calculateCoord();						//Compute so-called "intermediate coordinates", related to a more precise linearization of optical and range flow
 	void computeCoordsParallel();
     void calculateCoord(cv::Rect region);

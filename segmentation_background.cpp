@@ -36,7 +36,7 @@ void VO_SF::segmentStaticDynamic()
 	image_level = round(log2(width/cols));
 	
 	//First warp images according to the estimated odometry
-	warpImagesAccurate();
+    warpImagesAccurateInverse();
 
 	//Aux variables and parameters
 	Matrix<float, NUM_LABELS, 1> lab_res_c, lab_res_d, weighted_res;
@@ -45,9 +45,9 @@ void VO_SF::segmentStaticDynamic()
 	const float res_depth_t = 0.1f;
 
 	//Refs
-	const MatrixXf &depth_old_ref = depth_old[image_level];
+    const MatrixXf &depth_ref = depth[image_level];
 	const MatrixXf &depth_warped_ref = depth_warped[image_level];
-	const MatrixXf &intensity_old_ref = intensity_old[image_level];
+    const MatrixXf &intensity_ref = intensity[image_level];
 	const MatrixXf &intensity_warped_ref = intensity_warped[image_level];
 	const MatrixXi &labels_ref = labels[image_level];
 
@@ -59,11 +59,11 @@ void VO_SF::segmentStaticDynamic()
 	for (unsigned int u=1; u<cols-1; u++)
 		for (unsigned int v=1; v<rows-1; v++)
 		{
-			const float d_here = depth_old_ref(v,u);
+            const float d_here = depth_ref(v,u);
 			if (d_here != 0.f)
 			{	
-				const float sum_dif_depth = abs(depth_old_ref(v+1,u) - d_here) + abs(depth_old_ref(v-1,u) - d_here) 
-										  + abs(depth_old_ref(v,u+1) - d_here) + abs(depth_old_ref(v,u-1) - d_here);
+                const float sum_dif_depth = abs(depth_ref(v+1,u) - d_here) + abs(depth_ref(v-1,u) - d_here)
+                                          + abs(depth_ref(v,u+1) - d_here) + abs(depth_ref(v,u-1) - d_here);
 				edge_mask(v,u) = (sum_dif_depth < threshold_edge);
 			}
 		}
@@ -71,22 +71,22 @@ void VO_SF::segmentStaticDynamic()
 	//Compute residuals
 	for (unsigned int u=0; u<cols; u++)
 		for (unsigned int v=0; v<rows; v++)
-			if ((depth_old_ref(v,u) != 0.f)&&(depth_warped_ref(v,u) != 0.f))
+            if ((depth_ref(v,u) != 0.f)&&(depth_warped_ref(v,u) != 0.f))
 			{
 				const unsigned int pixel_label = labels_ref(v,u); //Using the binary segmentation here
 				
 				//Truncated Mean with occlusion handling
-				const float dif_depth = depth_old_ref(v,u) - depth_warped_ref(v,u);
+                const float dif_depth = depth_ref(v,u) - depth_warped_ref(v,u);
 				if (dif_depth < res_depth_t)
 				{
 					lab_res_d[pixel_label] += edge_mask(v,u)*min(trunc_threshold, abs(dif_depth));
-					lab_res_c[pixel_label] += edge_mask(v,u)*min(0.5f, abs(intensity_old_ref(v,u) - intensity_warped_ref(v,u)));
+                    lab_res_c[pixel_label] += edge_mask(v,u)*min(0.5f, abs(intensity_ref(v,u) - intensity_warped_ref(v,u)));
 				}
 				else if (dif_depth < 2.f*res_depth_t)
 				{
 					const float mult_factor = edge_mask(v,u)*(2.f*res_depth_t - dif_depth);
 					lab_res_d[pixel_label] += mult_factor;
-					lab_res_c[pixel_label] += mult_factor*min(0.5f, abs(intensity_old_ref(v,u) - intensity_warped_ref(v,u)));
+                    lab_res_c[pixel_label] += mult_factor*min(0.5f, abs(intensity_ref(v,u) - intensity_warped_ref(v,u)));
 				}		
 			}
 
@@ -101,7 +101,6 @@ void VO_SF::segmentStaticDynamic()
 		//Compute the overall residual
 		weighted_res[l] = k_photometric_res*lab_res_c[l] + lab_res_d[l]/max(1e-6f,kmeans(0,l)); 
 	}
-
 
 	//Optimization problem to improve consistency of the segmentation
 	//----------------------------------------------------------------------------
@@ -213,53 +212,64 @@ void VO_SF::warpStaticDynamicSegmentation()
 {
 	//Warp the KMeans and then compute belongings to them. 
 	//-----------------------------------------------------------
-	const MatrixXf &depth_ref = depth[image_level];
-	const MatrixXf &xx_ref = xx[image_level];
-	const MatrixXf &yy_ref = yy[image_level];
+//	const MatrixXf &depth_ref = depth[image_level];
+//	const MatrixXf &xx_ref = xx[image_level];
+//	const MatrixXf &yy_ref = yy[image_level];
 
-	//Warped Kmeans
-	Matrix<float, 3, NUM_LABELS> kmeans_w;
-	for (unsigned int l=0; l<NUM_LABELS; l++)
-	{
-        const Matrix4f trans = T_clusters[l].inverse();
-		const Vector4f kmeans_homog(kmeans(0,l), kmeans(1,l), kmeans(2,l), 1.f);
-		kmeans_w.col(l) = trans.block<3,4>(0,0)*kmeans_homog;
-	}
+//	//Warped Kmeans
+//	Matrix<float, 3, NUM_LABELS> kmeans_w;
+//	for (unsigned int l=0; l<NUM_LABELS; l++)
+//	{
+//        const Matrix4f trans = T_clusters[l].inverse();
+//		const Vector4f kmeans_homog(kmeans(0,l), kmeans(1,l), kmeans(2,l), 1.f);
+//		kmeans_w.col(l) = trans.block<3,4>(0,0)*kmeans_homog;
+//	}
 
-	//Compute distance between the kmeans (to improve runtime of the next phase)
-	Matrix<float, NUM_LABELS, NUM_LABELS> kmeans_dist;
-	for (unsigned int la=0; la<NUM_LABELS; la++)
-		for (unsigned int lb=la+1; lb<NUM_LABELS; lb++)
-			kmeans_dist(la,lb) = (kmeans_w.col(la) - kmeans_w.col(lb)).squaredNorm();
+//	//Compute distance between the kmeans (to improve runtime of the next phase)
+//	Matrix<float, NUM_LABELS, NUM_LABELS> kmeans_dist;
+//	for (unsigned int la=0; la<NUM_LABELS; la++)
+//		for (unsigned int lb=la+1; lb<NUM_LABELS; lb++)
+//			kmeans_dist(la,lb) = (kmeans_w.col(la) - kmeans_w.col(lb)).squaredNorm();
 
-	//Compute KMeans belongings
-	for (unsigned int u=0; u<cols; u++)
-		for (unsigned int v=0; v<rows; v++)
-			if (depth_ref(v,u) != 0.f)
-			{
-				const Vector3f p(depth_ref(v,u), xx_ref(v,u), yy_ref(v,u));
-				unsigned int label = 0;
-				float min_dist = (kmeans_w.col(0) - p).squaredNorm();
-				float dist_here;
+//	//Compute KMeans belongings
+//	for (unsigned int u=0; u<cols; u++)
+//		for (unsigned int v=0; v<rows; v++)
+//			if (depth_ref(v,u) != 0.f)
+//			{
+//				const Vector3f p(depth_ref(v,u), xx_ref(v,u), yy_ref(v,u));
+//				unsigned int label = 0;
+//				float min_dist = (kmeans_w.col(0) - p).squaredNorm();
+//				float dist_here;
 
-				for (unsigned int l=1; l<NUM_LABELS; l++)
-				{
-					if (kmeans_dist(label,l) > 4.f*min_dist) continue;
-					else if ((dist_here = (kmeans_w.col(l) - p).squaredNorm()) < min_dist)
-					{
-						label = l;
-						min_dist = dist_here;
-					}
-				}
+//				for (unsigned int l=1; l<NUM_LABELS; l++)
+//				{
+//					if (kmeans_dist(label,l) > 4.f*min_dist) continue;
+//					else if ((dist_here = (kmeans_w.col(l) - p).squaredNorm()) < min_dist)
+//					{
+//						label = l;
+//						min_dist = dist_here;
+//					}
+//				}
 
-				b_segm_image_warped(v,u) = b_segm[label];
-			}
-			else
-				b_segm_image_warped(v,u) = 0.f;
+//				b_segm_image_warped(v,u) = b_segm[label];
+//			}
+//			else
+//				b_segm_image_warped(v,u) = 0.f;
 
 	//Off initially for the first iteration but must be turned on after that
-	if (use_b_temp_reg == false)
-		use_b_temp_reg = true;
+//	if (use_b_temp_reg == false)
+//		use_b_temp_reg = true;
+
+
+    //Just fill the matrix (not optimal, we will change it)
+    MatrixXi &labels_ref = labels[image_level];
+
+    for (unsigned int u=0; u<cols; u++)
+        for (unsigned int v=0; v<rows; v++)
+            b_segm_image_warped(v,u) = max(0.f, min(1.f, b_segm[labels_ref(v,u)]));
+
+    //*****************************************
+
 }
 
 void VO_SF::computeSegTemporalRegValues()
@@ -269,15 +279,18 @@ void VO_SF::computeSegTemporalRegValues()
 	const MatrixXi &labels_ref = labels[image_level];
 	const MatrixXf &depth_old_ref = depth_old[image_level];
 
-	for (unsigned int u=0; u<cols; u++)
-		for (unsigned int v=0; v<rows; v++)
-			if (depth_old_ref(v,u) != 0.f)
-				b_segm_warped[labels_ref(v,u)] += b_segm_image_warped(v,u);
+//	for (unsigned int u=0; u<cols; u++)
+//		for (unsigned int v=0; v<rows; v++)
+//			if (depth_old_ref(v,u) != 0.f)
+//				b_segm_warped[labels_ref(v,u)] += b_segm_image_warped(v,u);
 	
 	
-	for (unsigned int l=0; l<NUM_LABELS; l++)
-		if (size_kmeans[l] != 0)
-			b_segm_warped[l] /= size_kmeans[l];
+//	for (unsigned int l=0; l<NUM_LABELS; l++)
+//		if (size_kmeans[l] != 0)
+//			b_segm_warped[l] /= size_kmeans[l];
+
+    for (unsigned int l=0; l<NUM_LABELS; l++)
+        b_segm_warped[l] = b_segm[l];
 }
 
 

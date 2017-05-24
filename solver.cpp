@@ -118,6 +118,7 @@ VO_SF::VO_SF(unsigned int res_factor) : ws_foreground(3*640*480/(2*res_factor*re
     //=========================================================
 	b_segm_image_warped.setSize(rows,cols);
 	b_segm_image_warped.fill(0.f);
+    b_segm.fill(0.f);
 	label_static.fill(true);
 	label_dynamic.fill(false);
 
@@ -965,6 +966,118 @@ void VO_SF::warpImagesAccurate()
 			}
 		}
 }
+
+void VO_SF::warpImagesAccurateInverse()
+{
+    //Camera parameters (which also depend on the level resolution)
+    const float f = float(cols_i)/(2.f*tan(0.5f*fovh));
+    const float disp_u_i = 0.5f*float(cols_i-1);
+    const float disp_v_i = 0.5f*float(rows_i-1);
+
+    //Refs
+    MatrixXf &depth_warped_ref = depth_warped[image_level];
+    MatrixXf &intensity_warped_ref = intensity_warped[image_level];
+    MatrixXf &xx_warped_ref = xx_warped[image_level];
+    MatrixXf &yy_warped_ref = yy_warped[image_level];
+    const MatrixXf &depth_ref = depth_old[image_level];
+    const MatrixXf &intensity_ref = intensity_old[image_level];
+    const MatrixXf &xx_ref = xx_old[image_level];
+    const MatrixXf &yy_ref = yy_old[image_level];
+    depth_warped_ref.assign(0.f);
+    intensity_warped_ref.assign(0.f);
+
+    //Aux variables
+    MatrixXf wacu(rows_i,cols_i); wacu.assign(0.f);
+    const float cols_lim = float(cols_i-1);
+    const float rows_lim = float(rows_i-1);
+
+    //Inverse warping here (bringing the old one towards the new one)
+    const Matrix4f T = T_odometry.inverse();
+
+    //						Warping loop
+    //---------------------------------------------------------
+    for (unsigned int j = 0; j<cols_i; j++)
+        for (unsigned int i = 0; i<rows_i; i++)
+        {
+            const float z = depth_ref(i,j);
+
+            if (z != 0.f)
+            {
+                //Transform point to the warped reference frame
+                const float intensity_w = intensity_ref(i,j);
+                const float depth_w = T(0,0)*z + T(0,1)*xx_ref(i,j) + T(0,2)*yy_ref(i,j) + T(0,3);
+                const float x_w = T(1,0)*z + T(1,1)*xx_ref(i,j) + T(1,2)*yy_ref(i,j) + T(1,3);
+                const float y_w = T(2,0)*z + T(2,1)*xx_ref(i,j) + T(2,2)*yy_ref(i,j) + T(2,3);
+
+                //Calculate warping
+                const float uwarp = f*x_w/depth_w + disp_u_i;
+                const float vwarp = f*y_w/depth_w + disp_v_i;
+
+                //The projection after transforming is not integer in general and, hence, the pixel contributes to all the surrounding ones
+                if (( uwarp >= 0.f)&&( uwarp < cols_lim)&&( vwarp >= 0.f)&&( vwarp < rows_lim))
+                {
+                    const int uwarp_l = uwarp;
+                    const int uwarp_r = uwarp_l + 1;
+                    const int vwarp_d = vwarp;
+                    const int vwarp_u = vwarp_d + 1;
+                    const float delta_r = float(uwarp_r) - uwarp;
+                    const float delta_l = uwarp - float(uwarp_l);
+                    const float delta_u = float(vwarp_u) - vwarp;
+                    const float delta_d = vwarp - float(vwarp_d);
+
+                    //Warped pixel very close to an integer value
+                    if (abs(round(uwarp) - uwarp) + abs(round(vwarp) - vwarp) < 0.05f)
+                    {
+                        depth_warped_ref(round(vwarp), round(uwarp)) += depth_w;
+                        intensity_warped_ref(round(vwarp), round(uwarp)) += intensity_w;
+                        wacu(round(vwarp), round(uwarp)) += 1.f;
+                    }
+                    else
+                    {
+                        const float w_ur = square(delta_l) + square(delta_d);
+                        depth_warped_ref(vwarp_u,uwarp_r) += w_ur*depth_w;
+                        intensity_warped_ref(vwarp_u,uwarp_r) += w_ur*intensity_w;
+                        wacu(vwarp_u,uwarp_r) += w_ur;
+
+                        const float w_ul = square(delta_r) + square(delta_d);
+                        depth_warped_ref(vwarp_u,uwarp_l) += w_ul*depth_w;
+                        intensity_warped_ref(vwarp_u,uwarp_l) += w_ul*intensity_w;
+                        wacu(vwarp_u,uwarp_l) += w_ul;
+
+                        const float w_dr = square(delta_l) + square(delta_u);
+                        depth_warped_ref(vwarp_d,uwarp_r) += w_dr*depth_w;
+                        intensity_warped_ref(vwarp_d,uwarp_r) += w_dr*intensity_w;
+                        wacu(vwarp_d,uwarp_r) += w_dr;
+
+                        const float w_dl = square(delta_r) + square(delta_u);
+                        depth_warped_ref(vwarp_d,uwarp_l) += w_dl*depth_w;
+                        intensity_warped_ref(vwarp_d,uwarp_l) += w_dl*intensity_w;
+                        wacu(vwarp_d,uwarp_l) += w_dl;
+                    }
+                }
+            }
+        }
+
+    //Scale the averaged depth and compute spatial coordinates
+    const float inv_f_i = 1.f/f;
+    for (unsigned int u = 0; u<cols_i; u++)
+        for (unsigned int v = 0; v<rows_i; v++)
+        {
+            if (wacu(v,u) != 0.f)
+            {
+                intensity_warped_ref(v,u) /= wacu(v,u);
+                depth_warped_ref(v,u) /= wacu(v,u);
+                xx_warped_ref(v,u) = (u - disp_u_i)*depth_warped_ref(v,u)*inv_f_i;
+                yy_warped_ref(v,u) = (v - disp_v_i)*depth_warped_ref(v,u)*inv_f_i;
+            }
+            else
+            {
+                xx_warped_ref(v,u) = 0.f;
+                yy_warped_ref(v,u) = 0.f;
+            }
+        }
+}
+
 
 
 void VO_SF::run_VO_SF(bool create_image_pyr)

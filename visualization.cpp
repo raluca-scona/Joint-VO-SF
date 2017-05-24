@@ -385,9 +385,9 @@ void VO_SF::updateSceneImageSeq()
 	CImage image;
 
 	//Refs
-	const MatrixXf &depth_old_ref = depth_old[repr_level];
-	const MatrixXf &yy_old_ref = yy_old[repr_level];
-	const MatrixXf &xx_old_ref = xx_old[repr_level];
+    const MatrixXf &depth_ref = depth[repr_level];
+    const MatrixXf &yy_ref = yy[repr_level];
+    const MatrixXf &xx_ref = xx[repr_level];
 	const MatrixXi &labels_ref = labels[repr_level];
 	
 	scene = window.get3DSceneAndLock();
@@ -418,37 +418,38 @@ void VO_SF::updateSceneImageSeq()
 	const unsigned int size_factor = width/cols;
 	for (unsigned int u=0; u<cols; u++)
 		for (unsigned int v=0; v<rows; v++)
-            if (depth_old_ref(v,u) != 0.f)
+            if (depth_ref(v,u) != 0.f)
 			{		
 				const float mult = (b_segm[labels_ref(v,u)] < 0.333f) ? 0.25f : brigthing_fact;
-				const float red = mult*(im_r_old(size_factor*v,size_factor*u)-1.f)+1.f;
-				const float green = mult*(im_g_old(size_factor*v,size_factor*u)-1.f)+1.f;
-				const float blue = mult*(im_b_old(size_factor*v,size_factor*u)-1.f)+1.f;
+                const float red = mult*(im_r(size_factor*v,size_factor*u)-1.f)+1.f;
+                const float green = mult*(im_g(size_factor*v,size_factor*u)-1.f)+1.f;
+                const float blue = mult*(im_b(size_factor*v,size_factor*u)-1.f)+1.f;
 
-				points->push_back(depth_old_ref(v,u), xx_old_ref(v,u), yy_old_ref(v,u), red, green, blue);			
+                points->push_back(depth_ref(v,u), xx_ref(v,u), yy_ref(v,u), red, green, blue);
 			}
 
 
 	//Scene flow
-	opengl::CVectorField3DPtr sf = scene->getByClass<CVectorField3D>(0);
-	sf->setPose(cam_pose);
-    sf->setPointCoordinates(depth_old[repr_level], xx_old[repr_level], yy_old[repr_level]);
+//	opengl::CVectorField3DPtr sf = scene->getByClass<CVectorField3D>(0);
+//	sf->setPose(cam_pose);
+//    sf->setPointCoordinates(depth_old[repr_level], xx_old[repr_level], yy_old[repr_level]);
 
-	//Modify scene flow to show only that of the uncertain or dynamic clusters
-	for (unsigned int u=0; u<cols; u++)
-		for (unsigned int v=0; v<rows; v++)
-			if (b_segm[labels_ref(v,u)] < 0.333f)
-			{
-				motionfield[0](v,u) = 0.f;
-				motionfield[1](v,u) = 0.f;
-				motionfield[2](v,u) = 0.f;
-			}
-    sf->setVectorField(motionfield[0], motionfield[1], motionfield[2]);
+//	//Modify scene flow to show only that of the uncertain or dynamic clusters
+//	for (unsigned int u=0; u<cols; u++)
+//		for (unsigned int v=0; v<rows; v++)
+//			if (b_segm[labels_ref(v,u)] < 0.333f)
+//			{
+//				motionfield[0](v,u) = 0.f;
+//				motionfield[1](v,u) = 0.f;
+//				motionfield[2](v,u) = 0.f;
+//			}
+//    sf->setVectorField(motionfield[0], motionfield[1], motionfield[2]);
 
 
 	//Image
 	COpenGLViewportPtr vp_image = scene->getViewport("image");
-    image.setFromRGBMatrices(im_r_old, im_g_old, im_b_old, true);
+    //image.setFromRGBMatrices(im_r_old, im_g_old, im_b_old, true);
+    image.setFromMatrix(b_segm_image_warped);
     image.flipVertical();
 	//image.flipHorizontal();
     vp_image->setImageView(image);
@@ -456,6 +457,7 @@ void VO_SF::updateSceneImageSeq()
 	//Labels
 	COpenGLViewportPtr vp_labels = scene->getViewport("labels");
     image.setFromRGBMatrices(labels_image[0], labels_image[1], labels_image[2], true);
+    //image.setFromMatrix(intensity_old[repr_level]);
     image.flipVertical();
 	//image.flipHorizontal();
     vp_labels->setImageView(image);
@@ -483,7 +485,7 @@ void VO_SF::createImagesOfSegmentations()
 
 	//Refs
 	const Matrix<float, NUM_LABELS+1, Dynamic> label_funct_ref = label_funct[image_level];
-	const MatrixXf &depth_old_ref = depth_old[image_level];
+    const MatrixXf &depth_ref = depth[image_level];
 
     //Associate colors to labels
     float r[NUM_LABELS], g[NUM_LABELS], b[NUM_LABELS];
@@ -503,7 +505,7 @@ void VO_SF::createImagesOfSegmentations()
 	//backg_image - Static parts in blue and moving objects in red
     for (unsigned int u=0; u<cols; u++)
         for (unsigned int v=0; v<rows; v++)
-            if (depth_old_ref(v,u) != 0.f)
+            if (depth_ref(v,u) != 0.f)
 			{
                 for (unsigned int l=0; l<NUM_LABELS; l++)
                 {

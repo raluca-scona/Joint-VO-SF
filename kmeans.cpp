@@ -45,9 +45,9 @@ void VO_SF::initializeKMeans()
 	//Initialization: kmeans are computed at one resolution lower than the max (to speed the process up)
 	rows_i = rows/2; cols_i = cols/2; 
 	image_level = round(log2(width/cols_i));
-	const MatrixXf &depth_ref = depth_old[image_level];
-	const MatrixXf &xx_ref = xx_old[image_level];
-	const MatrixXf &yy_ref = yy_old[image_level];
+    const MatrixXf &depth_ref = depth[image_level];
+    const MatrixXf &xx_ref = xx[image_level];
+    const MatrixXf &yy_ref = yy[image_level];
 	MatrixXi &labels_ref = labels[image_level];
 	labels_ref.assign(NUM_LABELS);
 
@@ -124,9 +124,9 @@ void VO_SF::kMeans3DCoord()
 	const unsigned int iter_kmeans = 10;
 
 	//Refs
-	const MatrixXf &depth_ref = depth_old[lower_level];
-	const MatrixXf &xx_ref = xx_old[lower_level];
-	const MatrixXf &yy_ref = yy_old[lower_level];
+    const MatrixXf &depth_ref = depth[lower_level];
+    const MatrixXf &xx_ref = xx[lower_level];
+    const MatrixXf &yy_ref = yy[lower_level];
 	MatrixXi &labels_lowres = labels[lower_level];
 
 	//Initialization
@@ -219,9 +219,9 @@ void VO_SF::kMeans3DCoord()
 
     //      Compute the labelling functions at the max resolution (rows,cols)
     //------------------------------------------------------------------------------------
-	const MatrixXf &depth_highres = depth_old[max_level];
-	const MatrixXf &xx_highres = xx_old[max_level];
-	const MatrixXf &yy_highres = yy_old[max_level];
+    const MatrixXf &depth_highres = depth[max_level];
+    const MatrixXf &xx_highres = xx[max_level];
+    const MatrixXf &yy_highres = yy[max_level];
 	MatrixXi &labels_ref = labels[max_level];
 
 	//Initialize labels
@@ -281,9 +281,9 @@ void VO_SF::computeRegionConnectivity()
 
 	//Refs
 	const MatrixXi &labels_ref = labels[max_level];
-	const MatrixXf &depth_old_ref = depth_old[max_level];
-	const MatrixXf &xx_old_ref = xx_old[max_level];
-	const MatrixXf &yy_old_ref = yy_old[max_level];
+    const MatrixXf &depth_ref = depth[max_level];
+    const MatrixXf &xx_ref = xx[max_level];
+    const MatrixXf &yy_ref = yy[max_level];
 
     for (unsigned int i=0; i<NUM_LABELS; i++)
         for (unsigned int j=0; j<NUM_LABELS; j++)
@@ -294,12 +294,12 @@ void VO_SF::computeRegionConnectivity()
 
     for (unsigned int u=0; u<cols-1; u++)
         for (unsigned int v=0; v<rows-1; v++)					
-			if (depth_old_ref(v,u) != 0.f)
+            if (depth_ref(v,u) != 0.f)
             {
                 //Detect change in the labelling (v+1,u)
                 if ((labels_ref(v,u) != labels_ref(v+1,u))&&(labels_ref(v+1,u) != NUM_LABELS))
                 {
-                    const float disty = square(depth_old_ref(v,u) - depth_old_ref(v+1,u)) + square(yy_old_ref(v,u) - yy_old_ref(v+1,u));
+                    const float disty = square(depth_ref(v,u) - depth_ref(v+1,u)) + square(yy_ref(v,u) - yy_ref(v+1,u));
                     if (disty < dist2_threshold)
                     {
                         connectivity[labels_ref(v,u)][labels_ref(v+1,u)] = true;
@@ -310,7 +310,7 @@ void VO_SF::computeRegionConnectivity()
                 //Detect change in the labelling (v,u+1)
                 if ((labels_ref(v,u) != labels_ref(v,u+1))&&(labels_ref(v,u+1) != NUM_LABELS))
                 {
-                    const float distx = square(depth_old_ref(v,u) - depth_old_ref(v,u+1)) + square(xx_old_ref(v,u) - xx_old_ref(v,u+1));
+                    const float distx = square(depth_ref(v,u) - depth_ref(v,u+1)) + square(xx_ref(v,u) - xx_ref(v,u+1));
                     if (distx < dist2_threshold)
                     {
                         connectivity[labels_ref(v,u)][labels_ref(v,u+1)] = true;
@@ -323,9 +323,9 @@ void VO_SF::computeRegionConnectivity()
 void VO_SF::smoothRegions(unsigned int image_level)
 {
 	//Refs
-	const MatrixXf &depth_ref = depth_old[image_level];
-	const MatrixXf &xx_ref = xx_old[image_level];
-	const MatrixXf &yy_ref = yy_old[image_level];
+    const MatrixXf &depth_ref = depth[image_level];
+    const MatrixXf &xx_ref = xx[image_level];
+    const MatrixXf &yy_ref = yy[image_level];
 	const MatrixXi &labels_ref = labels[image_level];
 	Matrix<float, NUM_LABELS+1, Dynamic> &label_funct_ref = label_funct[image_level];
 
@@ -388,9 +388,9 @@ void VO_SF::createLabelsPyramidUsingKMeans()
 
 		//Refs
 		MatrixXi &labels_ref = labels[image_level];
-		const MatrixXf &depth_old_ref = depth_old[image_level];
-		const MatrixXf &xx_old_ref = xx_old[image_level];
-		const MatrixXf &yy_old_ref = yy_old[image_level];
+        const MatrixXf &depth_old_ref = depth[image_level];
+        const MatrixXf &xx_old_ref = xx[image_level];
+        const MatrixXf &yy_old_ref = yy[image_level];
 
 		labels_ref.assign(NUM_LABELS);
 	

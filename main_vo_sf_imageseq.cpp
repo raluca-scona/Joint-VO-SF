@@ -145,6 +145,10 @@ int main()
     Eigen::Matrix4f pose;
     bool resetButton = false;
 
+    int totalRepeatFrames = 50;
+
+    int counter = 0;
+
     //                                  DONE WITH EF PARAMS
     // -------------------------------------------------------------------------------
 	
@@ -159,10 +163,15 @@ int main()
 
         //Load new image and solve
         case 'n':
-			im_count += decimation;
-			stop = cf.loadImageFromSequence(dir, im_count, res_factor);
-            cf.run_VO_SF(true);
 
+            im_count += decimation;
+
+            if (im_count > 960) {
+                cf.eFusion->savePly();
+            }
+
+            stop = cf.loadImageFromSequence(dir, im_count, res_factor);
+            cf.run_VO_SF(true);
 
             //RUNNING EF SOON
             efProcessFrame0 = std::chrono::high_resolution_clock::now();
@@ -179,8 +188,6 @@ int main()
 //            weightedImagePyramid[0] = level0WeightedImage;
 //            weightedImagePyramid[1] = level1WeightedImage;
 //            weightedImagePyramid[2] = level2WeightedImage;
-
-            std::cout<<" CAM POSE "<< sqrt (cf.cam_pose[0] * cf.cam_pose[0] + cf.cam_pose[1] * cf.cam_pose[1] + cf.cam_pose[2] * cf.cam_pose[2] )<<"\n";
 
             weightedImagePyramid[0].assign((float *) fullSizeWeightedImage.data, (float *) fullSizeWeightedImage.data + 640 / 1 * 480 / 1);
             weightedImagePyramid[1].assign((float *) weightedImage.data, (float *) weightedImage.data + 640 / 2 * 480 / 2);
