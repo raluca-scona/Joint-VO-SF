@@ -85,6 +85,7 @@ public:
 	std::vector<Eigen::MatrixXf> yy, yy_inter, yy_old, yy_warped;								//y coordinates of points (proportional to the row index of the pixels)
 
 	Eigen::MatrixXf depth_wf, intensity_wf;							//Original images read from the camera, dataset or file
+    Eigen::MatrixXf depth_wf_old, intensity_wf_old;					//Images from model prediction
     Eigen::MatrixXf dcu, dcv, dct;									//Gradients of the intensity images
     Eigen::MatrixXf ddu, ddv, ddt;									//Gradients of the depth images
 	Eigen::MatrixXf im_r, im_g, im_b;								//Last color image used only for visualization
@@ -110,7 +111,7 @@ public:
 
 
     VO_SF(unsigned int res_factor);
-    void createImagePyramid();					//Create image pyramids (intensity and depth)
+    void createImagePyramid(bool old_im);					//Create image pyramids (intensity and depth)
     void warpImages();							//Fast warping (last image towards the prev one)
     void warpImagesParallel();
     void warpImages(cv::Rect region);

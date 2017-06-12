@@ -40,24 +40,15 @@
 int main()
 {	
     const unsigned int res_factor = 2;
-	VO_SF cf(res_factor);
+    VO_SF cf(res_factor);
 
-
-	//Set first image to load, decimation factor and the sequence dir
-	unsigned int im_count = 1;
+    //Set first image to load, decimation factor and the sequence dir
+    unsigned int im_count = 1;
     const unsigned int decimation = 5;
-    std::string dir = "/usr/prakt/p025/datasets/Giraff-loop-m-format/"; im_count = 220;
+    std::string dir = "/usr/prakt/p025/datasets/Giraff-loop-m-format/"; im_count = 1;
+   // std::string dir = "/usr/prakt/p025/datasets/two-people-moving-1/"; im_count = 1;
 
-	//Load image and create pyramid
-	cf.loadImageFromSequence(dir, im_count, res_factor);
-	cf.createImagePyramid();
 
-	//Create the 3D Scene
-	cf.initializeSceneImageSeq();
-
-	//Auxiliary variables
-	int pushed_key = 0;
-	bool continuous_exec = false, stop = false;
 
     //                                  EF PARAMS
     // -------------------------------------------------------------------------------
@@ -65,9 +56,9 @@ int main()
     int icpCountThresh = 40000;
     float icpErrThresh = 5e-05;
     float covThresh = 1e-05;
-    bool openLoop = true;
+    bool openLoop = false;
     bool iclnuim = false;
-    bool reloc = false;
+    bool reloc = true;
     float photoThresh = 115;
     float confidence = 5.0f;
     float depth = 5.0f; //usually 3.5m -> pose drifts a lot with this setting
@@ -78,6 +69,31 @@ int main()
     bool frameToFrameRGB = false;
     const std::string fileName = "cf-mesh";
     int timeDelta = 200;
+
+    Eigen::Matrix4f headToNominalCamera = Eigen::Matrix4f::Zero();
+    Eigen::Matrix4f cameraToHead = Eigen::Matrix4f::Zero();
+    Eigen::Matrix4f cameraRightHand = Eigen::Matrix4f::Zero();
+
+    headToNominalCamera(0, 0) = 1;
+    headToNominalCamera(1, 1) = -1;
+    headToNominalCamera(1, 3) =  0.0350;
+    headToNominalCamera(2, 2) = -1;
+    headToNominalCamera(2, 3) = -0.002;
+    headToNominalCamera(3, 3) = 1;
+
+    cameraToHead(0, 1) = -1;
+    cameraToHead(0, 3) = 0.035;
+    cameraToHead(1, 2) = -1;
+    cameraToHead(1, 3) = -0.002;
+    cameraToHead(2, 0) = 1;
+    cameraToHead(3, 3) = 1;
+
+    cameraRightHand = cameraToHead * headToNominalCamera;
+
+    Eigen::Matrix4f poseEFCoords = Eigen::Matrix4f::Identity();
+
+
+
 
     Resolution::getInstance(640, 480);
     Intrinsics::getInstance(528, 528, 320, 240);
@@ -120,6 +136,8 @@ int main()
 
 
     Eigen::Matrix4f * currentPose = 0;
+    Eigen::Matrix4f identityMat = Eigen::Matrix4f::Identity();
+
     float weightMultiplier = 1;
 
     std::chrono::duration<double, std::milli> processFrameDuration;
@@ -145,9 +163,58 @@ int main()
     Eigen::Matrix4f pose;
     bool resetButton = false;
 
-    int totalRepeatFrames = 50;
 
-    int counter = 0;
+    cv::Mat colorPrediction;
+    cv::Mat depthPrediction;
+    //                                  EF PARAMS
+    // -------------------------------------------------------------------------------
+
+
+
+
+    for (int i=0; i<5; i++) {
+
+        currentPose = 0;
+        im_count = im_count + decimation;
+        //Load image and create pyramid
+        cf.loadImageFromSequence(dir, im_count, res_factor);
+
+        //get data in EF format here
+        weightedImagePyramid[0].assign((float *) level0WeightedImage.data(), (float *) level0WeightedImage.data() + 640 / 1 * 480 / 1);
+        weightedImagePyramid[1].assign((float *) level1WeightedImage.data(), (float *) level1WeightedImage.data() + 640 / 2 * 480 / 2);
+        weightedImagePyramid[2].assign((float *) level2WeightedImage.data(), (float *) level2WeightedImage.data() + 640 / 4 * 480 / 4);
+
+        rgbImage = cf.color_full.data;
+
+        for(int i = 0; i < 640 * 480 * 3; i += 3)
+        {
+            std::swap(rgbImage[i + 0], rgbImage[i + 2]);   //flipping the colours
+        }
+
+        //here I must create a weighted pyramid to pass to EF, also with images in the format that are expected
+        //this is the first iteration -> here we just initialise the model and so, nothing else happens
+
+
+            std::cout<<"camera right hand \n"<<cameraRightHand<<"\n";
+            std::cout<<"camera right hand inverse \n"<<cameraRightHand.inverse()<<"\n";
+
+
+            cf.eFusion->processFrame(rgbImage, (unsigned short *) cf.depth_full.data, weightedImagePyramid , im_count, currentPose , weightMultiplier);
+            //cf.eFusion->processFrame(rgbImage, (unsigned short *) cf.depth_full.data, weightedImagePyramid , im_count, currentPose,weightMultiplier);
+
+    }
+
+
+	//Create the 3D Scene
+	cf.initializeSceneImageSeq();
+
+
+	//Auxiliary variables
+	int pushed_key = 0;
+	bool continuous_exec = false, stop = false;
+
+
+    const float norm_factor = 1.f/255.f;
 
     //                                  DONE WITH EF PARAMS
     // -------------------------------------------------------------------------------
@@ -163,31 +230,47 @@ int main()
 
         //Load new image and solve
         case 'n':
-
             im_count += decimation;
 
-            if (im_count > 960) {
-                cf.eFusion->savePly();
+            if (im_count > 100) {
+             //   im_count = 1;
             }
 
+            std::cout<<"IMAGE COUNT "<<im_count<<"\n";
+
             stop = cf.loadImageFromSequence(dir, im_count, res_factor);
-            cf.run_VO_SF(true);
+
+
+            //Got images from the model, should overwrite the old images and re-do the pyramid
+            cf.eFusion->getPredictedImages(colorPrediction, depthPrediction);
+
+            //overwriting the previous colour and depth images
+            for (unsigned int v=0; v<cf.height; v++) {
+                for (unsigned int u=0; u<cf.width; u++)
+                {
+                    cv::Vec3b color_here = colorPrediction.at<cv::Vec3b>(res_factor*v,res_factor*u);
+                    cf.im_r_old(cf.height-1-v,u) = norm_factor*color_here[0];
+                    cf.im_g_old(cf.height-1-v,u) = norm_factor*color_here[1];
+                    cf.im_b_old(cf.height-1-v,u) = norm_factor*color_here[2];
+                    cf.intensity_wf_old(cf.height-1-v,u) = 0.299f* cf.im_r_old(cf.height-1-v,u) + 0.587f*cf.im_g_old(cf.height-1-v,u) + 0.114f*cf.im_b_old(cf.height-1-v,u);
+
+                    cf.depth_wf_old(cf.height-1-v,u) = depthPrediction.at<float>(res_factor*v,res_factor*u);
+                }
+            }
+
+            cf.createImagePyramid(true);   //pyramid for the old model
+
+
+            cf.run_VO_SF(true); //run algorithm using pyramid
 
             //RUNNING EF SOON
             efProcessFrame0 = std::chrono::high_resolution_clock::now();
 
             weightedImageColumnMajor = cv::Mat(320, 240, CV_32F, cf.b_segm_image_warped.data());
-
             cv::flip(weightedImageColumnMajor, weightedImage, 1);
-
             cv::transpose(weightedImage, weightedImage);  //stored in row major order
-
             cv::resize(weightedImage, fullSizeWeightedImage,  cv::Size(640, 480) , 0,0);  //resize to full image
             cv::resize(weightedImage, smallestWeightedImage,  cv::Size(640/4, 480/4) , 0,0);  //resize to small image
-
-//            weightedImagePyramid[0] = level0WeightedImage;
-//            weightedImagePyramid[1] = level1WeightedImage;
-//            weightedImagePyramid[2] = level2WeightedImage;
 
             weightedImagePyramid[0].assign((float *) fullSizeWeightedImage.data, (float *) fullSizeWeightedImage.data + 640 / 1 * 480 / 1);
             weightedImagePyramid[1].assign((float *) weightedImage.data, (float *) weightedImage.data + 640 / 2 * 480 / 2);
@@ -200,15 +283,26 @@ int main()
                 std::swap(rgbImage[i + 0], rgbImage[i + 2]);   //flipping the colours
             }
 
-            cf.eFusion->processFrame(rgbImage, (unsigned short *) cf.depth_full.data, weightedImagePyramid , im_count, currentPose, weightMultiplier);
+            currentPose = 0;
+
+            //this does everything apart from odometry -> fusion, loop closure (do we want this right now?)
+
+            //poseEFCoords = cameraRightHand * cf.T_odometry * cameraRightHand.inverse();
+
+            poseEFCoords =  cf.T_odometry ;
+
+
+            cf.eFusion->processFrame(rgbImage, (unsigned short *) cf.depth_full.data, weightedImagePyramid , im_count, & (poseEFCoords), weightMultiplier );//& (cf.T_odometry), weightMultiplier);
+
+           // cf.eFusion->processFrame(rgbImage, (unsigned short *) cf.depth_full.data, weightedImagePyramid , im_count, currentPose, weightMultiplier );//& (cf.T_odometry), weightMultiplier);
+
 
             efProcessFrame1 = std::chrono::high_resolution_clock::now();
 
             processFrameDuration = efProcessFrame1 - efProcessFrame0;
 
-            std::cout<<"\nef process frame time: "<<processFrameDuration.count()<<"\n";
 
-            //ALL THE GUI
+            //ALL THE GUI -> remove this eventually as it is terrible
 
             if (true) {
 
@@ -356,8 +450,6 @@ int main()
             }
 
             //NO MORE EF GUI
-
-
             //DONE WITH EF
 
 

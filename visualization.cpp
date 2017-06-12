@@ -147,7 +147,6 @@ void VO_SF::initializeSceneDatasets()
 	sf_points->enablePointSmooth(1);
 	scene->insert( sf_points );
 
-
 	//Labels
 	COpenGLViewportPtr vp_image = scene->createViewport("image");
     vp_image->setViewportPosition(0.775,0.675,320,240);
@@ -373,9 +372,9 @@ void VO_SF::updateSceneDatasets(const CPose3D &gt, const CPose3D &gt_old)
 	window.repaint();
 
 	//Only used for the visualization (assuming here that the update method is only called once per new frame)
-	im_r_old.swap(im_r);
-	im_g_old.swap(im_g);
-	im_b_old.swap(im_b);
+    im_r_old.swap(im_r);
+    im_g_old.swap(im_g);
+    im_b_old.swap(im_b);
 
 }
 
@@ -388,14 +387,23 @@ void VO_SF::updateSceneImageSeq()
     const MatrixXf &depth_ref = depth[repr_level];
     const MatrixXf &yy_ref = yy[repr_level];
     const MatrixXf &xx_ref = xx[repr_level];
-	const MatrixXi &labels_ref = labels[repr_level];
+    const MatrixXi &labels_ref = labels[repr_level];
 	
+    const MatrixXf &depth_ref_old = depth_old[repr_level];
+    const MatrixXf &yy_ref_old = yy_old[repr_level];
+    const MatrixXf &xx_ref_old = xx_old[repr_level];
+
+
 	scene = window.get3DSceneAndLock();
 
 	//Camera
-	CPose3D rel_lenspose(0,-0.022,0,0,0,0);
+    CPose3D rel_lenspose(0,-0.022,0,0,0,0);
 	CBoxPtr camera = scene->getByClass<CBox>(0);
-	camera->setPose(cam_pose + rel_lenspose);
+    camera->setPose(cam_pose + rel_lenspose);
+    CPose3D rel_lenspose2(0, 0,0,0,0,0);
+    //cam_pose = rel_lenspose2;
+
+    //camera->setPose(cam_pose);
 	scene->insert( camera );
 
 	//Frustum
@@ -420,12 +428,20 @@ void VO_SF::updateSceneImageSeq()
 		for (unsigned int v=0; v<rows; v++)
             if (depth_ref(v,u) != 0.f)
 			{		
-				const float mult = (b_segm[labels_ref(v,u)] < 0.333f) ? 0.25f : brigthing_fact;
-                const float red = mult*(im_r(size_factor*v,size_factor*u)-1.f)+1.f;
-                const float green = mult*(im_g(size_factor*v,size_factor*u)-1.f)+1.f;
-                const float blue = mult*(im_b(size_factor*v,size_factor*u)-1.f)+1.f;
+                float mult = (b_segm[labels_ref(v,u)] < 0.333f) ? 0.25f : brigthing_fact;
+                mult = 1.0;
+                const float red = 0.0; //mult*(im_r(size_factor*v,size_factor*u)-1.f)+1.f;
+                const float green = 0.0; //mult*(im_g(size_factor*v,size_factor*u)-1.f)+1.f;
+                const float blue = 0.0; //mult*(im_b(size_factor*v,size_factor*u)-1.f)+1.f;
+
+                const float red_old = 1.0; //1*(im_r_old(size_factor*v,size_factor*u)-1.f)+1.f;
+                const float green_old  = 0.0; //1*(im_g_old (size_factor*v,size_factor*u)-1.f)+1.f;
+                const float blue_old  = 0.0; //1*(im_b_old (size_factor*v,size_factor*u)-1.f)+1.f;
+
+
 
                 points->push_back(depth_ref(v,u), xx_ref(v,u), yy_ref(v,u), red, green, blue);
+                points->push_back(depth_ref_old(v,u), xx_ref_old(v,u), yy_ref_old(v,u), red_old, green_old, blue_old);
 			}
 
 

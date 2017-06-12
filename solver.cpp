@@ -42,7 +42,7 @@ VO_SF::VO_SF(unsigned int res_factor) : ws_foreground(3*640*480/(2*res_factor*re
 	ctf_levels = log2(cols/40) + 2;
 
 	//Solver
-	k_photometric_res = 0.15f;
+    k_photometric_res = 1.0; //0.15f;
 	irls_chi2_decrement_threshold = 0.98f;
     irls_delta_threshold = 1e-6f;
 	max_iter_irls = 10;
@@ -56,6 +56,8 @@ VO_SF::VO_SF(unsigned int res_factor) : ws_foreground(3*640*480/(2*res_factor*re
 	//Resize matrices which are not in a "pyramid"
 	depth_wf.setSize(height,width);
 	intensity_wf.setSize(height,width);
+    depth_wf_old.setSize(height,width);
+    intensity_wf_old.setSize(height,width);
 	im_r.resize(height,width); im_g.resize(height,width); im_b.resize(height,width);
 	im_r_old.resize(height,width); im_g_old.resize(height,width); im_b_old.resize(height,width);
 
@@ -155,7 +157,7 @@ void VO_SF::loadImagePairFromFiles(string files_dir, unsigned int res_factor)
         for (unsigned int u=0; u<width; u++)
             depth_wf(height-1-v,u) = depth_float.at<float>(res_factor*v+1,res_factor*u);
 
-	createImagePyramid();
+    createImagePyramid(false);
 
 
 
@@ -178,7 +180,7 @@ void VO_SF::loadImagePairFromFiles(string files_dir, unsigned int res_factor)
         for (unsigned int u=0; u<width; u++)
             depth_wf(height-1-v,u) = depth_float.at<float>(res_factor*v+1,res_factor*u);
 
-	createImagePyramid();
+    createImagePyramid(false);
 }
 
 bool VO_SF::loadImageFromSequence(string files_dir, unsigned int index, unsigned int res_factor)
@@ -272,20 +274,22 @@ void VO_SF::saveFlowAndSegmToFile(string files_dir)
 }
 
 
-void VO_SF::createImagePyramid()
+void VO_SF::createImagePyramid(bool old_im)
 {	
 	//Threshold to use (or not) neighbours in the filter
 	const float max_depth_dif = 0.1f;
 
     //Push the frames back
-    intensity_old.swap(intensity);
-    depth_old.swap(depth);
-    xx_old.swap(xx);
-    yy_old.swap(yy);
+
+//    intensity_old.swap(intensity);   //exchanges the contents between these vectors
+//    depth_old.swap(depth);
+//    xx_old.swap(xx);
+//    yy_old.swap(yy);
 
     //The number of levels of the pyramid does not match the number of levels used
     //in the odometry computation (because we sometimes want to finish with lower resolutions)
     unsigned int pyr_levels = round(log2(width/cols)) + ctf_levels;
+
 
     //Generate levels
     for (unsigned int i = 0; i<pyr_levels; i++)
@@ -294,24 +298,29 @@ void VO_SF::createImagePyramid()
         cols_i = width/s;
         rows_i = height/s;
         const unsigned int i_1 = i-1;
-		MatrixXf &depth_here = depth[i];
-		MatrixXf &intensity_here = intensity[i];
-		MatrixXf &xx_here = xx[i];
-		MatrixXf &yy_here = yy[i];
 
-        if (i == 0)
+        MatrixXf &depth_here = old_im ? depth_old[i] : depth[i];    //saying which one to modify
+        MatrixXf &intensity_here = old_im ? intensity_old[i] : intensity[i];
+        MatrixXf &xx_here = old_im ? xx_old[i] : xx[i];
+        MatrixXf &yy_here = old_im ? yy_old[i] : yy[i];
+        const MatrixXf &depth_prev = old_im ? depth_old[i_1] : depth[i_1];
+        const MatrixXf &intensity_prev = old_im ? intensity_old[i_1] : intensity[i_1];
+
+
+
+        if (i == 0 && !old_im)
         {
             depth_here.swap(depth_wf);
             intensity_here.swap(intensity_wf);
+        } else if (i==0 && old_im){
+            depth_here.swap(depth_wf_old);
+            intensity_here.swap(intensity_wf_old);
         }
 
         //                              Downsampling
         //-----------------------------------------------------------------------------
         else
-        {
-            const MatrixXf &depth_prev = depth[i_1];
-			const MatrixXf &intensity_prev = intensity[i_1];
-			
+        {	
 			for (unsigned int u = 0; u < cols_i; u++)
                 for (unsigned int v = 0; v < rows_i; v++)
                 {
@@ -321,9 +330,11 @@ void VO_SF::createImagePyramid()
                     //Inner pixels
                     if ((v>0)&&(v<rows_i-1)&&(u>0)&&(u<cols_i-1))
                     {
+
                         const Matrix4f depth_block = depth_prev.block<4,4>(v2-1,u2-1);
                         const Matrix4f intensity_block = intensity_prev.block<4,4>(v2-1,u2-1);
                         float depths[4] = {depth_block(5), depth_block(6), depth_block(9), depth_block(10)};
+
 
                         //Find the "second maximum" value of the central block
 						if (depths[1] < depths[0]) {std::swap(depths[1], depths[0]);}
@@ -345,6 +356,7 @@ void VO_SF::createImagePyramid()
                                     sum_c += aux_w*intensity_block(k);
                                 }
                             }
+
                             depth_here(v,u) = sum_d/weight;
                             intensity_here(v,u) = sum_c/weight;
                         }
@@ -358,6 +370,7 @@ void VO_SF::createImagePyramid()
                     //Boundary
                     else
                     {
+
                         const Matrix2f depth_block = depth_prev.block<2,2>(v2,u2);
                         const Matrix2f intensity_block = intensity_prev.block<2,2>(v2,u2);
 
@@ -372,8 +385,10 @@ void VO_SF::createImagePyramid()
 								cont++;
 							}
 
+
                         if (cont != 0)	depth_here(v,u) = new_d/float(cont);
                         else		    depth_here(v,u) = 0.f;
+
                     }
                 }
         }
@@ -384,9 +399,11 @@ void VO_SF::createImagePyramid()
         const float disp_v_i = 0.5f*(rows_i-1);
 
         for (unsigned int u = 0; u < cols_i; u++)
-            for (unsigned int v = 0; v < rows_i; v++)
+            for (unsigned int v = 0; v < rows_i; v++) {
+
                 if (depth_here(v,u) != 0.f)
                 {
+
                     xx_here(v,u) = (u - disp_u_i)*depth_here(v,u)*inv_f_i;
                     yy_here(v,u) = (v - disp_v_i)*depth_here(v,u)*inv_f_i;
                 }
@@ -395,6 +412,9 @@ void VO_SF::createImagePyramid()
                     xx_here(v,u) = 0.f;
                     yy_here(v,u) = 0.f;
                 }
+            }
+
+
     }
 }
 
@@ -741,7 +761,7 @@ void VO_SF::updateCameraPoseFromOdometry()
 	cam_oldpose = cam_pose;
 	math::CMatrixDouble44 aux_acu = T_odometry;
 	poses::CPose3D pose_aux(aux_acu);
-	cam_pose = cam_pose + pose_aux;
+    cam_pose = cam_pose + pose_aux;
 }
 
 void VO_SF::computeTransformationFromTwist(Vector6f &twist, bool is_odometry, unsigned int label)
@@ -1087,15 +1107,15 @@ void VO_SF::run_VO_SF(bool create_image_pyr)
 	//Create the image pyramid if it has not been computed yet
     //----------------------------------------------------------------------------------
 	if (create_image_pyr) 
-		createImagePyramid();
+        createImagePyramid(false);
 
     //Create labels
     //----------------------------------------------------------------------------------
     //Kmeans
-	kMeans3DCoord();
+    kMeans3DCoord();   //on newest image
 
 	//Create the pyramid for the labels
-	createLabelsPyramidUsingKMeans();
+    createLabelsPyramidUsingKMeans(); //also on current
 
 	//Compute warped b_segmentation (necessary for the robust estimation)
 	computeSegTemporalRegValues();
@@ -1120,10 +1140,10 @@ void VO_SF::run_VO_SF(bool create_image_pyr)
 			//1. Perform warping
 			if (i == 0)
 			{
-				depth_warped[image_level] = depth[image_level];
-				intensity_warped[image_level] = intensity[image_level];
-				xx_warped[image_level] = xx[image_level];
-				yy_warped[image_level] = yy[image_level];
+                depth_warped[image_level] = depth[image_level];
+                intensity_warped[image_level] = intensity[image_level];
+                xx_warped[image_level] = xx[image_level];
+                yy_warped[image_level] = yy[image_level];
 			}
 			else 
                 warpImagesAccurate(); // forward warping, more precise
