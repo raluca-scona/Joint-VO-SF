@@ -194,7 +194,7 @@ bool VO_SF::loadImageFromSequence(string files_dir, unsigned int index, unsigned
     string name = files_dir + aux;
 
 	cv::Mat color = cv::imread(name.c_str(), CV_LOAD_IMAGE_COLOR);
-    color_full = color;   //passing full image into EF
+    color_full = cv::imread(name.c_str(), CV_LOAD_IMAGE_COLOR);
 
 	if (color.data == NULL)
 	{
@@ -213,18 +213,31 @@ bool VO_SF::loadImageFromSequence(string files_dir, unsigned int index, unsigned
 			intensity_wf(height-1-v,u) = 0.299f*im_r(height-1-v,u) + 0.587f*im_g(height-1-v,u) + 0.114f*im_b(height-1-v,u);
 		}
 
+    for (unsigned int v=0; v<height * res_factor; v++)
+        for (unsigned int u=0; u<width * res_factor; u++)
+        {
+            cv::Vec3b color_here = color.at<cv::Vec3b>(v, u);
+            color_full.at<cv::Vec3b>(height * res_factor - 1 - v, u) = color_here;
+        }
+
     sprintf(aux, "d%d.png", index);
     name = files_dir + aux;
 
     cv::Mat depth = cv::imread(name, -1);
     cv::Mat depth_float;
+    cv::Mat depth_float_mm;
     depth.convertTo(depth_float, CV_32FC1, 1.0 / 5000.0);
+    depth.convertTo(depth_float_mm, CV_16U, 1000.0 / 5000.0);
     depth.convertTo(depth_full, CV_16U, 1000.0 / 5000.0);
-
 
     for (unsigned int v=0; v<height; v++)
         for (unsigned int u=0; u<width; u++)
             depth_wf(height-1-v,u) = depth_float.at<float>(res_factor*v,res_factor*u);
+
+    for (unsigned int v=0; v<height * res_factor; v++)
+        for (unsigned int u=0; u<width* res_factor; u++) {
+            depth_full.at<unsigned short>(height * res_factor -1 -v, u) = depth_float_mm.at<unsigned short>(v,u);
+        }
 
 	return false;
 }
