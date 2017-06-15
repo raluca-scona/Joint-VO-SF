@@ -83,7 +83,7 @@ void Datasets::openRawlog()
 	last_gt_row = 0;
 }
 
-void Datasets::loadFrameAndPoseFromDataset(Eigen::MatrixXf &depth_wf, Eigen::MatrixXf &intensity_wf, Eigen::MatrixXf &im_r, Eigen::MatrixXf &im_g, Eigen::MatrixXf &im_b)
+void Datasets::loadFrameAndPoseFromDataset(Eigen::MatrixXf &depth_wf, Eigen::MatrixXf &intensity_wf, Eigen::MatrixXf &im_r, Eigen::MatrixXf &im_g, Eigen::MatrixXf &im_b, cv::Mat depth_full, cv::Mat color_full)
 {
 	if (dataset_finished)
 	{
@@ -114,8 +114,8 @@ void Datasets::loadFrameAndPoseFromDataset(Eigen::MatrixXf &depth_wf, Eigen::Mat
 	const unsigned int width = range.getColCount();
 	const unsigned int cols = width/downsample, rows = height/downsample;
 
-	math::CMatrixFloat intensity, r, g, b;
-	intensity.resize(height, width);
+    math::CMatrixFloat intensity, r, g, b;
+    intensity.resize(height, width);
 	r.resize(height, width); g.resize(height, width); b.resize(height, width);
 	int_image.getAsMatrix(intensity);
 	int_image.getAsRGBMatrices(r, g, b);
@@ -132,7 +132,18 @@ void Datasets::loadFrameAndPoseFromDataset(Eigen::MatrixXf &depth_wf, Eigen::Mat
 			im_r(i,j) = b(height-downsample*i-1, width-downsample*j-1);
 			im_g(i,j) = g(height-downsample*i-1, width-downsample*j-1);
 			im_b(i,j) = r(height-downsample*i-1, width-downsample*j-1);
-		}
+        }
+
+
+    for (unsigned int j = 0; j<width; j++)
+        for (unsigned int i = 0; i<height; i++)
+        {
+            const float z = range(height-i-1, width-j-1);
+            if (z < max_distance)	depth_full.at<unsigned short>(i,j) = z * 1000.0;
+            else					depth_full.at<unsigned short>(i,j) = 0.f;
+
+            color_full.at<cv::Vec3b>(i,j) = cv::Vec3b( r(height-i-1, width-j-1) * 255, g(height-i-1, width-j-1)* 255, b(height-i-1, width-j-1)* 255);
+        }
 
 
 	timestamp_obs = mrpt::system::timestampTotime_t(obs3D->timestamp);

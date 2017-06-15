@@ -42,7 +42,7 @@ VO_SF::VO_SF(unsigned int res_factor) : ws_foreground(3*640*480/(2*res_factor*re
 	ctf_levels = log2(cols/40) + 2;
 
 	//Solver
-    k_photometric_res = 1.0; //0.15f;
+    k_photometric_res = 0.15f;
 	irls_chi2_decrement_threshold = 0.98f;
     irls_delta_threshold = 1e-6f;
 	max_iter_irls = 10;
@@ -202,7 +202,6 @@ bool VO_SF::loadImageFromSequence(string files_dir, unsigned int index, unsigned
 		return true;
 	}
 		
-
     for (unsigned int v=0; v<height; v++)
         for (unsigned int u=0; u<width; u++)
 		{
@@ -290,7 +289,7 @@ void VO_SF::saveFlowAndSegmToFile(string files_dir)
 void VO_SF::createImagePyramid(bool old_im)
 {	
 	//Threshold to use (or not) neighbours in the filter
-	const float max_depth_dif = 0.1f;
+    const float max_depth_dif = 0.1f;
 
     //Push the frames back
 

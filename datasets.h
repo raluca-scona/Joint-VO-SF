@@ -26,6 +26,7 @@
 #include <mrpt/utils/CConfigFileBase.h>
 #include <mrpt/system/filesystem.h>
 #include <mrpt/obs/CObservation3DRangeScan.h>
+#include <opencv2/opencv.hpp>
 #include <Eigen/Core>
 #include <iostream>
 #include <fstream>
@@ -53,7 +54,7 @@ public:
 	bool dataset_finished;
 
     void openRawlog();
-	void loadFrameAndPoseFromDataset(Eigen::MatrixXf &depth_wf, Eigen::MatrixXf &intensity_wf, Eigen::MatrixXf &im_r, Eigen::MatrixXf &im_g,Eigen::MatrixXf &im_b);
+    void loadFrameAndPoseFromDataset(Eigen::MatrixXf &depth_wf, Eigen::MatrixXf &intensity_wf, Eigen::MatrixXf &im_r, Eigen::MatrixXf &im_g,Eigen::MatrixXf &im_b, cv::Mat depth_full, cv::Mat color_full);
 	void CreateResultsFile();
 	void writeTrajectoryFile(mrpt::poses::CPose3D &cam_pose, Eigen::MatrixXf &ddt);
 };

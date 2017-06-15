@@ -48,9 +48,9 @@ int main()
     camera.openCamera();
     camera.disableAutoExposureAndWhiteBalance();
 	camera.loadFrame(cf.depth_wf, cf.intensity_wf);
-    cf.createImagePyramid();
+    cf.createImagePyramid(true);
 	camera.loadFrame(cf.depth_wf, cf.intensity_wf);
-    cf.createImagePyramid();
+    cf.createImagePyramid(true);
 	cf.initializeKMeans();
 
 	//Auxiliary variables for the interface
@@ -73,7 +73,7 @@ int main()
 		case  'n':
 			cf.use_b_temp_reg = false; //I turn it off here for individual framepair tests
             camera.loadFrame(cf.depth_wf, cf.intensity_wf);
-			cf.createImagePyramid();
+            cf.createImagePyramid(true);
 			cf.kMeans3DCoord();
             cf.createImagesOfSegmentations();
 

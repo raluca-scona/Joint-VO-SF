@@ -23,6 +23,7 @@
 
 #include <string.h>
 #include <joint_vo_sf.h>
+#include <ef.h>
 
 #include <chrono>
 #include <iostream>
@@ -54,79 +55,7 @@ int main()
     //                                  EF PARAMS
     // -------------------------------------------------------------------------------
 
-    int icpCountThresh = 40000;
-    float icpErrThresh = 5e-05;
-    float covThresh = 1e-05;
-    bool openLoop = false;
-    bool iclnuim = false;
-    bool reloc = true;
-    float photoThresh = 115;
-    float confidence = 2.0f;
-    float depth = 5.0f; //usually 3.5m -> pose drifts a lot with this setting
-    float icp = 10.0f;
-    bool fastOdom = false;
-    float fernThresh = 0.3095f;
-    bool so3 = true; //remember to update this
-    bool frameToFrameRGB = false;
-    const std::string fileName = "cf-mesh";
-    int timeDelta = 200;
-
-    Eigen::Matrix4f fromNomToVis = Eigen::Matrix4f::Zero();
-    Eigen::Matrix4f fromVisToNom = Eigen::Matrix4f::Zero();
-
-    Eigen::Quaternionf fromNomToVisQuat = Eigen::AngleAxisf(0.5*M_PI, Eigen::Vector3f::UnitZ()) * Eigen::AngleAxisf(0.5*M_PI, Eigen::Vector3f::UnitX());
-
-    Eigen::Matrix3f fromNomToVisRot = fromNomToVisQuat.normalized().toRotationMatrix();
-
-    fromNomToVis.topLeftCorner(3, 3) = fromNomToVisRot;
-    fromNomToVis(3, 3) = 1;
-
-    fromVisToNom = fromNomToVis.inverse();
-
-    Eigen::Matrix4f poseEFCoords = Eigen::Matrix4f::Identity();
-
-    Resolution::getInstance(640, 480);
-    Intrinsics::getInstance(528, 528, 320, 240);
-
-    cf.gui = new GUI(fileName.length() == 0, false);
-
-    cf.gui->flipColors->Ref().Set(true);
-    cf.gui->rgbOnly->Ref().Set(false);
-    cf.gui->pyramid->Ref().Set(true);
-    cf.gui->fastOdom->Ref().Set(fastOdom);
-    cf.gui->confidenceThreshold->Ref().Set(confidence);
-    cf.gui->depthCutoff->Ref().Set(depth);
-    cf.gui->icpWeight->Ref().Set(icp);
-    cf.gui->so3->Ref().Set(so3);
-    cf.gui->frameToFrameRGB->Ref().Set(frameToFrameRGB);
-
-    cf.resizeStream = new Resize(Resolution::getInstance().width(),
-                                 Resolution::getInstance().height(),
-                                 Resolution::getInstance().width() / 2,
-                                 Resolution::getInstance().height() / 2);
-
-
-    cf.eFusion = new ElasticFusion(openLoop ? std::numeric_limits<int>::max() / 2 : timeDelta,
-                                  icpCountThresh,
-                                  icpErrThresh,
-                                  covThresh,
-                                  !openLoop,
-                                  iclnuim,
-                                  reloc,
-                                  photoThresh,
-                                  confidence,
-                                  depth,
-                                  icp,
-                                  fastOdom,
-                                  fernThresh,
-                                  so3,
-                                  frameToFrameRGB,
-                                  fileName);
-
-
-    Eigen::Matrix4f identityMat = Eigen::Matrix4f::Identity();
-
-    float weightMultiplier = 1;
+    EF_Container ef;
 
     std::chrono::duration<double, std::milli> processFrameDuration;
     std::chrono::high_resolution_clock::time_point efProcessFrame0;
@@ -144,15 +73,10 @@ int main()
     std::vector<std::vector<float> > weightedImagePyramid(3);
     unsigned char * rgbImage;
 
-    //GUI hacks
-    std::stringstream stri;
-    std::stringstream stre;
-
-    Eigen::Matrix4f pose;
-    bool resetButton = false;
-
     cv::Mat colorPrediction;
     cv::Mat depthPrediction;
+
+    Eigen::Matrix4f poseEFCoords;
 
     //                                  DONE WITH EF PARAMS
     // -------------------------------------------------------------------------------
@@ -173,7 +97,8 @@ int main()
     weightedImagePyramid[2].assign((float *) level2WeightedImage.data(), (float *) level2WeightedImage.data() + 640 / 4 * 480 / 4);
 
     //Initialise model in EF to the first frame we get
-    cf.eFusion->processFrame(rgbImage, (unsigned short *) cf.depth_full.data, weightedImagePyramid , im_count, & (identityMat) , weightMultiplier);
+    ef.eFusion->processFrame(rgbImage, (unsigned short *) cf.depth_full.data, weightedImagePyramid , im_count, 0 , 1);
+
 
 	//Create the 3D Scene
 	cf.initializeSceneImageSeq();
@@ -202,7 +127,7 @@ int main()
             efProcessFrame0 = std::chrono::high_resolution_clock::now();
 
             //Got images from the model, should overwrite the old images and re-do the pyramid
-            cf.eFusion->getPredictedImages(colorPrediction, depthPrediction);
+            ef.eFusion->getPredictedImages(colorPrediction, depthPrediction);
 
             //overwriting the previous colour and depth images
             for (unsigned int v=0; v<cf.height; v++) {
@@ -221,9 +146,9 @@ int main()
             cf.createImagePyramid(true);   //pyramid for the old model
 
             cf.run_VO_SF(true); //run algorithm using pyramid for new images
+            poseEFCoords = ef.fromVisToNom * cf.T_odometry * ef.fromNomToVis; //EF uses the coordinate frame with Z forwards, Y upwards
 
             weightedImageColumnMajor = cv::Mat(320, 240, CV_32F, cf.b_segm_image_warped.data()); //Eigen returns data in column-major
-
             //When running in this mode, images are flipped upside down. If I want to pass them in their original orientation, I need to do flip them.
             //Now I am just passing them as they have been preprocessed in CF, so upside down.
             //cv::flip(weightedImageColumnMajor, weightedImage, 1);
@@ -243,9 +168,7 @@ int main()
                 std::swap(rgbImage[i + 0], rgbImage[i + 2]);   //get the colour image of the latest frame
             }
 
-            poseEFCoords = fromVisToNom * cf.T_odometry * fromNomToVis; //EF uses the coordinate frame with Z forwards, Y upwards
-
-            cf.eFusion->processFrame(rgbImage, (unsigned short *) cf.depth_full.data, weightedImagePyramid, im_count, & (poseEFCoords), weightMultiplier);
+            ef.eFusion->processFrame(rgbImage, (unsigned short *) cf.depth_full.data, weightedImagePyramid, im_count, &(poseEFCoords), 1);
 
             efProcessFrame1 = std::chrono::high_resolution_clock::now();
 
@@ -253,156 +176,7 @@ int main()
 
             std::cout<<"\n Run-time of whole thing "<<processFrameDuration.count()<<"\n";
 
-            //ALL THE GUI -> remove this eventually as it is terrible
-
-            if (false) {
-
-                if(cf.gui->followPose->Get())
-                {
-                    pangolin::OpenGlMatrix mv;
-
-                    Eigen::Matrix4f currPose = cf.eFusion->getCurrPose();
-                    Eigen::Matrix3f currRot = currPose.topLeftCorner(3, 3);
-
-                    Eigen::Quaternionf currQuat(currRot);
-                    Eigen::Vector3f forwardVector(0, 0, 1);
-                    Eigen::Vector3f upVector(0, iclnuim ? 1 : -1, 0);
-
-                    Eigen::Vector3f forward = (currQuat * forwardVector).normalized();
-                    Eigen::Vector3f up = (currQuat * upVector).normalized();
-
-                    Eigen::Vector3f eye(currPose(0, 3), currPose(1, 3), currPose(2, 3));
-
-                    eye -= forward;
-
-                    Eigen::Vector3f at = eye + forward;
-
-                    Eigen::Vector3f z = (eye - at).normalized();  // Forward
-                    Eigen::Vector3f x = up.cross(z).normalized(); // Right
-                    Eigen::Vector3f y = z.cross(x);
-
-                    Eigen::Matrix4d m;
-                    m << x(0),  x(1),  x(2),  -(x.dot(eye)),
-                         y(0),  y(1),  y(2),  -(y.dot(eye)),
-                         z(0),  z(1),  z(2),  -(z.dot(eye)),
-                            0,     0,     0,              1;
-
-                    memcpy(&mv.m[0], m.data(), sizeof(Eigen::Matrix4d));
-
-                    cf.gui->s_cam.SetModelViewMatrix(mv);
-                }
-
-
-                cf.gui->preCall();
-
-                pose = cf.eFusion->getCurrPose();
-
-                if(cf.gui->drawRawCloud->Get() || cf.gui->drawFilteredCloud->Get() || cf.gui->drawStaticCloud->Get())
-                {
-                    cf.eFusion->computeFeedbackBuffers();
-                }
-
-
-                if(cf.gui->drawRawCloud->Get())
-                {
-                    cf.eFusion->getFeedbackBuffers().at(FeedbackBuffer::RAW)->render(cf.gui->s_cam.GetProjectionModelViewMatrix(), pose, cf.gui->drawNormals->Get(), cf.gui->drawColors->Get());
-                }
-
-
-                if(cf.gui->drawFilteredCloud->Get())
-                {
-                    cf.eFusion->getFeedbackBuffers().at(FeedbackBuffer::FILTERED)->render(cf.gui->s_cam.GetProjectionModelViewMatrix(), pose, cf.gui->drawNormals->Get(), cf.gui->drawColors->Get());
-                }
-
-                if(cf.gui->drawStaticCloud->Get())
-                {
-                    cf.eFusion->getFeedbackBuffers().at(FeedbackBuffer::STATIC)->render(cf.gui->s_cam.GetProjectionModelViewMatrix(), pose, cf.gui->drawNormals->Get(), cf.gui->drawColors->Get());
-                }
-
-
-
-
-
-                if(cf.gui->drawGlobalModel->Get())
-                {
-                    glFinish();
-
-
-                    cf.eFusion->getGlobalModel().renderPointCloud(cf.gui->s_cam.GetProjectionModelViewMatrix(),
-                                                               cf.eFusion->getConfidenceThreshold(),
-                                                               cf.gui->drawUnstable->Get(),
-                                                               cf.gui->drawNormals->Get(),
-                                                               cf.gui->drawColors->Get(),
-                                                               cf.gui->drawPoints->Get(),
-                                                               cf.gui->drawWindow->Get(),
-                                                               cf.gui->drawTimes->Get(),
-                                                               cf.eFusion->getTick(),
-                                                               cf.eFusion->getTimeDelta());
-
-                    glFinish();
-                }
-
-
-
-                if(cf.eFusion->getLost())
-                {
-                    glColor3f(1, 1, 0);
-                }
-                else
-                {
-                    glColor3f(1, 0, 1);
-                }
-                cf.gui->drawFrustum(pose);
-
-
-                glColor3f(1, 1, 1);
-
-                cf.eFusion->normaliseDepth(0.3f, cf.gui->depthCutoff->Get());
-
-                for(std::map<std::string, GPUTexture*>::const_iterator it = cf.eFusion->getTextures().begin(); it != cf.eFusion->getTextures().end(); ++it)
-                {
-                    if(it->second->draw)
-                    {
-                        cf.gui->displayImg(it->first, it->second);
-                    }
-                }
-
-                cf.eFusion->getIndexMap().renderDepth(cf.gui->depthCutoff->Get());
-
-
-                cf.gui->displayImg("ModelImg", cf.eFusion->getIndexMap().imageTex());
-                cf.gui->displayImg("Model", cf.eFusion->getIndexMap().drawTex());
-
-                cf.gui->postCall();
-
-
-                cf.eFusion->setRgbOnly(cf.gui->rgbOnly->Get());
-                cf.eFusion->setPyramid(cf.gui->pyramid->Get());
-                cf.eFusion->setFastOdom(cf.gui->fastOdom->Get());
-                cf.eFusion->setConfidenceThreshold(cf.gui->confidenceThreshold->Get());
-                cf.eFusion->setDepthCutoff(cf.gui->depthCutoff->Get());
-                cf.eFusion->setIcpWeight(cf.gui->icpWeight->Get());
-                cf.eFusion->setSo3(cf.gui->so3->Get());
-                cf.eFusion->setFrameToFrameRGB(cf.gui->frameToFrameRGB->Get());
-
-                resetButton = pangolin::Pushed(*cf.gui->reset);
-
-
-                if(resetButton)
-                {
-                    break;
-                }
-
-                if(pangolin::Pushed(*cf.gui->save))
-                {
-                    cf.eFusion->savePly();
-                }
-
-            }
-
-            //NO MORE EF GUI
-            //DONE WITH EF
-
+            ef.updateGUI();
 
             cf.createImagesOfSegmentations();
             cf.updateSceneImageSeq();
