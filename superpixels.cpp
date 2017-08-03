@@ -1,9 +1,9 @@
 #include <superpixels.h>
 
-Superpixels::Superpixels(Eigen::MatrixXf im_r, Eigen::MatrixXf im_g, Eigen::MatrixXf im_b, unsigned int superpixelsNo, float m) {
+Superpixels::Superpixels(Eigen::MatrixXf im_r, Eigen::MatrixXf im_g, Eigen::MatrixXf im_b, Eigen::MatrixXf xx, Eigen::MatrixXf yy, Eigen::MatrixXf depth, unsigned int superpixelsNo, float m) {
 
-    rows = im_r.rows() /2.5; // / 2 / 1.6;
-    cols = im_r.cols() /2.5; // / 2 / 1.6;
+    rows = im_r.rows(); // / 2 / 1.6;
+    cols = im_r.cols(); // / 2 / 1.6;
 
     Eigen::MatrixXf r_resize = Eigen::MatrixXf::Zero(rows, cols);
     Eigen::MatrixXf g_resize = Eigen::MatrixXf::Zero(rows, cols);
@@ -11,9 +11,9 @@ Superpixels::Superpixels(Eigen::MatrixXf im_r, Eigen::MatrixXf im_g, Eigen::Matr
 
     for (int i=0; i<rows; i++){
         for (int j=0; j<cols; j++) {
-            r_resize(i,j) = im_r(i* 2.5, j*2.5 );
-            g_resize(i,j) = im_g(i* 2.5, j*2.5 );
-            b_resize(i,j) = im_b(i* 2.5, j*2.5 );
+            r_resize(i,j) = im_r(i, j);
+            g_resize(i,j) = im_g(i, j);
+            b_resize(i,j) = im_b(i, j);
         }
     }
 
@@ -27,6 +27,10 @@ Superpixels::Superpixels(Eigen::MatrixXf im_r, Eigen::MatrixXf im_g, Eigen::Matr
     lmat = Eigen::MatrixXd::Zero(rows, cols);
     amat = Eigen::MatrixXd::Zero(rows, cols);
     bmat = Eigen::MatrixXd::Zero(rows, cols);
+
+    xmat = xx;
+    ymat = yy;
+    zmat = depth;
 
     this->superpixelsNo = superpixelsNo;
 
@@ -44,7 +48,6 @@ Superpixels::Superpixels(Eigen::MatrixXf im_r, Eigen::MatrixXf im_g, Eigen::Matr
     segmentationDuration = segmentationT1 - segmentationT0;
 
         std::cout<<"\n Run-time superpixels seg: "<<segmentationDuration.count()<<"\n";
-
 }
 
 
@@ -108,7 +111,7 @@ void Superpixels::rgbToLab(Eigen::MatrixXf im_r, Eigen::MatrixXf im_g, Eigen::Ma
 
 }
 
-void Superpixels::findSeeds(const int width, const int height, int &numk, vector<int> &kx, vector<int> &ky) {
+void Superpixels::findSeeds(const int width, const int height, int &numk, vector<int> &kx, vector<int> &ky, vector<float> &kx_metric, vector<float> &ky_metric, vector<float> &kz_metric) {
     const int sz = width*height;
     int gridstep = sqrt(double(sz)/double(numk)) + 0.5;
     int halfstep = gridstep/2;
@@ -126,7 +129,8 @@ void Superpixels::findSeeds(const int width, const int height, int &numk, vector
     }
 
     numk = (xsteps*ysteps);
-    kx.resize(numk); ky.resize(numk);
+    kx.resize(numk); ky.resize(numk); kx_metric.resize(numk); ky_metric.resize(numk); kz_metric.resize(numk);
+
     int n = 0;
     for(int y = halfstep, rowstep = 0; y < height && n < numk; y += gridstep, rowstep++)
     {
@@ -136,6 +140,9 @@ void Superpixels::findSeeds(const int width, const int height, int &numk, vector
             {
                 kx[n] = x;
                 ky[n] = y;
+                kx_metric[n] = xmat(y, x);
+                ky_metric[n] = ymat(y, x);
+                kz_metric[n] = zmat(y, x);
                 n++;
             }
         }
@@ -153,6 +160,9 @@ void Superpixels::runSNIC(const int width, const int height, int *outnumk, const
     struct NODE
     {
         unsigned int i; // the x and y values packed into one
+        float z_metric;
+        float x_metric;
+        float y_metric;
         unsigned int k; // the label
         double d;       // the distance
     };
@@ -166,9 +176,9 @@ void Superpixels::runSNIC(const int width, const int height, int *outnumk, const
     //-------------
     // Find seeds
     //-------------
-    vector<int> cx(0),cy(0);
+    vector<int> cx(0),cy(0); vector<float> cz_metric(0), cx_metric(0), cy_metric(0);
     int numk = innumk;
-    findSeeds(width,height,numk,cx,cy);//the function may modify numk from its initial value
+    findSeeds(width,height,numk,cx,cy,cx_metric, cy_metric, cz_metric);//the function may modify numk from its initial value
 
 
     //-------------
@@ -181,6 +191,10 @@ void Superpixels::runSNIC(const int width, const int height, int *outnumk, const
     {
         NODE tempnode;
         tempnode.i = cx[k] << 16 | cy[k];
+        tempnode.z_metric = cz_metric[k];
+        tempnode.x_metric = cx_metric[k];
+        tempnode.y_metric = cy_metric[k];
+
         tempnode.k = k;
         tempnode.d = 0;
         pq.push(tempnode);
@@ -188,7 +202,7 @@ void Superpixels::runSNIC(const int width, const int height, int *outnumk, const
         reachedByQueue(cy[k], cx[k]) = 1;
     }
     vector<double> kl(numk, 0), ka(numk, 0), kb(numk, 0);
-    vector<double> kx(numk,0),ky(numk,0);
+    vector<double> kx(numk,0),ky(numk,0), kz_metric(numk, 0), kx_metric(numk, 0), ky_metric(numk, 0);
     vector<double> ksize(numk,0);
 
     const int CONNECTIVITY = 4; //values can be 4 or 8
@@ -198,15 +212,13 @@ void Superpixels::runSNIC(const int width, const int height, int *outnumk, const
     int qlength = pq.size();
     int pixelcount = 0;
     int xx(0),yy(0),ii(0);
-    double ldiff(0),adiff(0),bdiff(0),xdiff(0),ydiff(0),colordist(0),xydist(0),slicdist(0);
+    double ldiff(0),adiff(0),bdiff(0),xdiff(0),ydiff(0),zdiff(0),colordist(0),xydist(0),slicdist(0);
 
     //-------------
     // Run main loop
     //-------------
     while(qlength > 0) //while(nodevec.size() > 0)
     {
-       // std::cout<<"QUEUE SIZE: "<<qlength<<"\n";
-
         NODE node = pq.top(); pq.pop(); qlength--;
         const int k = node.k;
         const int x = node.i >> 16 & 0xffff;
@@ -216,8 +228,6 @@ void Superpixels::runSNIC(const int width, const int height, int *outnumk, const
         int row = y;
         int col = x;
 
-        //y*width +x -> y is the row index,x is the column index;
-
         if(labelsImage(row, col) == superpixelsNo)
         {
             labelsImage(row, col) = k;
@@ -226,8 +236,14 @@ void Superpixels::runSNIC(const int width, const int height, int *outnumk, const
             kl[k] += lmat(row, col);
             ka[k] += amat(row, col);
             kb[k] += bmat(row, col);
+
             kx[k] += x;
             ky[k] += y;
+
+            kx_metric[k] += xmat(row, col);
+            ky_metric[k] += ymat(row, col);
+            kz_metric[k] += zmat(row, col);
+
             ksize[k] += 1.0;
 
             for(int p = 0; p < CONNECTIVITY; p++)
@@ -244,12 +260,21 @@ void Superpixels::runSNIC(const int width, const int height, int *outnumk, const
                         ldiff = kl[k] - lmat(yy, xx)*ksize[k];
                         adiff = ka[k] - amat(yy, xx)*ksize[k];
                         bdiff = kb[k] - bmat(yy, xx)*ksize[k];
-                        xdiff = kx[k] - xx*ksize[k];
+
+                        xdiff = kx[k] - xx*ksize[k];   //pixel distances
                         ydiff = ky[k] - yy*ksize[k];
 
+//                        xdiff = (kx_metric[k] - xmat(yy, xx) * ksize[k]) ;
+//                        ydiff = (ky_metric[k] - ymat(yy, xx) * ksize[k]) ;
+                        zdiff = (kz_metric[k] - zmat(yy, xx) * ksize[k]); //* 100.0;
+
+                      //  std::cout<<xdiff<<" "<<ydiff<<" "<<zdiff<<"\n";
+
+
                         colordist   = ldiff*ldiff + adiff*adiff + bdiff*bdiff;
-                        xydist      = xdiff*xdiff + ydiff*ydiff;
-                        slicdist    = (colordist + xydist*invwt)/(ksize[k]*ksize[k]);//late normalization by ksize[k], to have only one division operation
+                        xydist      = xdiff*xdiff + ydiff*ydiff; //+ zdiff*zdiff;
+
+                        slicdist    = (colordist + xydist*invwt /*+ zdiff*zdiff*400.0 */)/(ksize[k]*ksize[k]);//late normalization by ksize[k], to have only one division operation
 
                         tempnode.i = xx << 16 | yy;
                         tempnode.k = k;

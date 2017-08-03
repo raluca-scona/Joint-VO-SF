@@ -17,12 +17,12 @@ using namespace std;
 class Superpixels {
 public:
 
-    Superpixels(Eigen::MatrixXf im_r, Eigen::MatrixXf im_g, Eigen::MatrixXf im_b, unsigned int superpixelsNo, float m);
+    Superpixels(Eigen::MatrixXf im_r, Eigen::MatrixXf im_g, Eigen::MatrixXf im_b,  Eigen::MatrixXf xx, Eigen::MatrixXf yy, Eigen::MatrixXf depth, unsigned int superpixelsNo, float m);
 
     Eigen::MatrixXi getLabelsImage();
 
     void rgbToLab(Eigen::MatrixXf im_r, Eigen::MatrixXf im_g, Eigen::MatrixXf im_b);
-    void findSeeds(const int width, const int height, int& numk, vector<int>& kx, vector<int>& ky);
+    void findSeeds(const int width, const int height, int& numk, vector<int>& kx, vector<int>& ky, vector<float>& kz_metric, vector<float>& kx_metric, vector<float>& ky_metric);
     void runSNIC(const int width, const int height, int* outnumk, const int innumk, const double compactness);
 
 
@@ -42,6 +42,10 @@ private:
     Eigen::MatrixXd amat;
     Eigen::MatrixXd bmat;
 
+
+    Eigen::MatrixXf xmat;
+    Eigen::MatrixXf ymat;
+    Eigen::MatrixXf zmat;
 
     std::ofstream printSuperpixels;
 
