@@ -262,8 +262,6 @@ struct ICPReduction
     PtrStep<float> vmap_curr;
     PtrStep<float> nmap_curr;
 
-    PtrStep<float> current_image_weight;
-
     mat33 Rprev_inv;
     float3 tprev;
 
@@ -349,46 +347,40 @@ struct ICPReduction
             row[6] = dot (n_cp, s_cp - d_cp);
         }
 
-        float weight = 1.0 - current_image_weight.ptr (y)[x];
+        JtJJtrSE3 values = {row[0] * row[0],
+                            row[0] * row[1],
+                            row[0] * row[2],
+                            row[0] * row[3],
+                            row[0] * row[4],
+                            row[0] * row[5],
+                            row[0] * row[6],
 
-        if (weight < 0.9) {
-            weight = 0.0;
-        }
+                            row[1] * row[1],
+                            row[1] * row[2],
+                            row[1] * row[3],
+                            row[1] * row[4],
+                            row[1] * row[5],
+                            row[1] * row[6],
 
-        JtJJtrSE3 values = {row[0] * weight * row[0],
-                            row[0] * weight * row[1],
-                            row[0] * weight * row[2],
-                            row[0] * weight * row[3],
-                            row[0] * weight * row[4],
-                            row[0] * weight * row[5],
-                            row[0] * weight * row[6],
+                            row[2] * row[2],
+                            row[2] * row[3],
+                            row[2] * row[4],
+                            row[2] * row[5],
+                            row[2] * row[6],
 
-                            row[1] * weight * row[1],
-                            row[1] * weight * row[2],
-                            row[1] * weight * row[3],
-                            row[1] * weight * row[4],
-                            row[1] * weight * row[5],
-                            row[1] * weight * row[6],
+                            row[3] * row[3],
+                            row[3] * row[4],
+                            row[3] * row[5],
+                            row[3] * row[6],
 
-                            row[2] * weight * row[2],
-                            row[2] * weight * row[3],
-                            row[2] * weight * row[4],
-                            row[2] * weight * row[5],
-                            row[2] * weight * row[6],
+                            row[4] * row[4],
+                            row[4] * row[5],
+                            row[4] * row[6],
 
-                            row[3] * weight * row[3],
-                            row[3] * weight * row[4],
-                            row[3] * weight * row[5],
-                            row[3] * weight * row[6],
+                            row[5] * row[5],
+                            row[5] * row[6],
 
-                            row[4] * weight * row[4],
-                            row[4] * weight * row[5],
-                            row[4] * weight * row[6],
-
-                            row[5] * weight * row[5],
-                            row[5] * weight * row[6],
-
-                            row[6] * weight * row[6],
+                            row[6] * row[6],
                             found_coresp};
 
         return values;
@@ -440,8 +432,8 @@ void icpStep(const mat33& Rcurr,
              float * vectorB_host,
              float * residual_host,
              int threads,
-             int blocks,
-             const DeviceArray2D<float>& current_image_weight)
+             int blocks
+             )
 {
     int cols = vmap_curr.cols ();
     int rows = vmap_curr.rows () / 3;
@@ -453,7 +445,6 @@ void icpStep(const mat33& Rcurr,
 
     icp.vmap_curr = vmap_curr;
     icp.nmap_curr = nmap_curr;
-    icp.current_image_weight = current_image_weight;
 
     icp.Rprev_inv = Rprev_inv;
     icp.tprev = tprev;
@@ -513,8 +504,6 @@ struct RGBReduction
     PtrStepSz<short> dIdy;
     float sobelScale;
 
-    PtrStep<float> current_image_weight;
-
     int cols;
     int rows;
     int N;
@@ -571,46 +560,40 @@ struct RGBReduction
         int y = i / cols;
         int x = i - (y * cols);
 
-        float weight =  1.0 - current_image_weight.ptr(y)[x];
+        JtJJtrSE3 values = {row[0] * row[0],
+                            row[0] * row[1],
+                            row[0] * row[2],
+                            row[0] * row[3],
+                            row[0] * row[4],
+                            row[0] * row[5],
+                            row[0] * row[6],
 
-        if (weight < 0.9) {
-            weight = 0.0;
-        }
+                            row[1] * row[1],
+                            row[1] * row[2],
+                            row[1] * row[3],
+                            row[1] * row[4],
+                            row[1] * row[5],
+                            row[1] * row[6],
 
-        JtJJtrSE3 values = {row[0] * weight * row[0],
-                            row[0] * weight * row[1],
-                            row[0] * weight * row[2],
-                            row[0] * weight * row[3],
-                            row[0] * weight * row[4],
-                            row[0] * weight * row[5],
-                            row[0] * weight * row[6],
+                            row[2] * row[2],
+                            row[2] * row[3],
+                            row[2] * row[4],
+                            row[2] * row[5],
+                            row[2] * row[6],
 
-                            row[1] * weight * row[1],
-                            row[1] * weight * row[2],
-                            row[1] * weight * row[3],
-                            row[1] * weight * row[4],
-                            row[1] * weight * row[5],
-                            row[1] * weight * row[6],
+                            row[3] * row[3],
+                            row[3] * row[4],
+                            row[3] * row[5],
+                            row[3] * row[6],
 
-                            row[2] * weight * row[2],
-                            row[2] * weight * row[3],
-                            row[2] * weight * row[4],
-                            row[2] * weight * row[5],
-                            row[2] * weight * row[6],
+                            row[4] * row[4],
+                            row[4] * row[5],
+                            row[4] * row[6],
 
-                            row[3] * weight * row[3],
-                            row[3] * weight * row[4],
-                            row[3] * weight * row[5],
-                            row[3] * weight * row[6],
+                            row[5] * row[5],
+                            row[5] * row[6],
 
-                            row[4] * weight * row[4],
-                            row[4] * weight * row[5],
-                            row[4] * weight * row[6],
-
-                            row[5] * weight * row[5],
-                            row[5] * weight * row[6],
-
-                            row[6] * weight * row[6],
+                            row[6] * row[6],
                             found_coresp};
 
         return values;
@@ -658,8 +641,8 @@ void rgbStep(const DeviceArray2D<DataTerm> & corresImg,
              float * matrixA_host,
              float * vectorB_host,
              int threads,
-             int blocks,
-             const DeviceArray2D<float>& current_image_weight)
+             int blocks
+             )
 {
     RGBReduction rgb;
 
@@ -675,7 +658,6 @@ void rgbStep(const DeviceArray2D<DataTerm> & corresImg,
     rgb.sobelScale = sobelScale;
     rgb.N = rgb.cols * rgb.rows;
     rgb.out = sum;
-    rgb.current_image_weight = current_image_weight;
 
     rgbKernel<<<blocks, threads>>>(rgb);
 
@@ -974,8 +956,6 @@ struct SO3Reduction
 
     JtJJtrSO3 * out;
 
-    PtrStep<float>  current_image_weight;
-
 
     __device__ __forceinline__ float2
     getGradient(const PtrStepSz<unsigned char> img, int x, int y) const
@@ -1000,12 +980,6 @@ struct SO3Reduction
     {
         int y = k / cols;
         int x = k - (y * cols);
-
-        float weight = 1.0 - current_image_weight.ptr (y)[x];
-
-        if (weight < 0.9) {
-            weight = 0.0;
-        }
 
         bool found_coresp = false;
 
@@ -1070,19 +1044,19 @@ struct SO3Reduction
 
 
 
-        JtJJtrSO3 values = {row[0] * weight * row[0],
-                            row[0] * weight * row[1],
-                            row[0] * weight * row[2],
-                            row[0] * weight * row[3],
+        JtJJtrSO3 values = {row[0] * row[0],
+                            row[0] * row[1],
+                            row[0] * row[2],
+                            row[0] * row[3],
 
-                            row[1] * weight * row[1],
-                            row[1] * weight * row[2],
-                            row[1] * weight * row[3],
+                            row[1] * row[1],
+                            row[1] * row[2],
+                            row[1] * row[3],
 
-                            row[2] * weight * row[2],
-                            row[2] * weight * row[3],
+                            row[2] * row[2],
+                            row[2] * row[3],
 
-                            row[3] * weight * row[3],
+                            row[3] * row[3],
                             found_coresp};
 
         return values;
@@ -1125,8 +1099,8 @@ void so3Step(const DeviceArray2D<unsigned char> & lastImage,
              float * vectorB_host,
              float * residual_host,
              int threads,
-             int blocks,
-             const DeviceArray2D<float>& current_image_weight)
+             int blocks
+             )
 {
     int cols = nextImage.cols();
     int rows = nextImage.rows();
@@ -1147,7 +1121,6 @@ void so3Step(const DeviceArray2D<unsigned char> & lastImage,
     so3.N = cols * rows;
 
     so3.out = sum;
-    so3.current_image_weight = current_image_weight;
 
     so3Kernel<<<blocks, threads>>>(so3);
 

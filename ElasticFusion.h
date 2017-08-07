@@ -66,7 +66,7 @@ class ElasticFusion
          * Process an rgb/depth map pair
          * @param rgb unsigned char row major order
          * @param depth unsigned short z-depth in millimeters, invalid depths are 0
-         * @param weightedImagePyramid pyramid of probabilities of dynamic objects
+         * @param weightedImage image of probabilities of dynamic objects
          * @param timestamp nanoseconds (actually only used for the output poses, not important otherwise)
          * @param inPose optional input SE3 pose (if provided, we don't attempt to perform tracking)
          * @param weightMultiplier optional full frame fusion weight
@@ -74,7 +74,7 @@ class ElasticFusion
          */
         void processFrame(const unsigned char * rgb,
                           const unsigned short * depth,
-                          std::vector<std::vector<float> > weightedImagePyramid,
+                          const float * weightedImage,
                           const int64_t & timestamp,
                           const Eigen::Matrix4f * inPose = 0,
                           const float weightMultiplier = 1.f,

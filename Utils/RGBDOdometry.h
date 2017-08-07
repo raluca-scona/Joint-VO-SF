@@ -42,8 +42,6 @@ class RGBDOdometry
 
         void initICP(GPUTexture * filteredDepth, const float depthCutoff);
 
-        void initWeightedPyramid(std::vector<std::vector<float> > weightedPyramid);
-
         void initICP(GPUTexture * predictedVertices, GPUTexture * predictedNormals, const float depthCutoff);
 
         void initICPModel(GPUTexture * predictedVertices, GPUTexture * predictedNormals, const float depthCutoff, const Eigen::Matrix4f & modelPose);
@@ -78,8 +76,6 @@ class RGBDOdometry
         void populateRGBDData(GPUTexture * rgb,
                               DeviceArray2D<float> * destDepths,
                               DeviceArray2D<unsigned char> * destImages);
-
-        std::vector<DeviceArray2D<float> > weightedImagePyramid;
 
         std::vector<DeviceArray2D<unsigned short> > depth_tmp;
 

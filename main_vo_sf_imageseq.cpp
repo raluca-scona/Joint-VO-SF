@@ -67,10 +67,7 @@ int main()
     cv::Mat weightedImage;
 
     std::vector<float> level0WeightedImage (Resolution::getInstance().width() * Resolution::getInstance().height(), 0.0);
-    std::vector<float> level1WeightedImage (Resolution::getInstance().width() / 2 * Resolution::getInstance().height() / 2, 0.0 );
-    std::vector<float> level2WeightedImage (Resolution::getInstance().width() / 4 * Resolution::getInstance().height() / 4, 0.0 );
 
-    std::vector<std::vector<float> > weightedImagePyramid(3);
     unsigned char * rgbImage;
 
     cv::Mat colorPrediction;
@@ -93,13 +90,10 @@ int main()
         std::swap(rgbImage[i + 0], rgbImage[i + 2]);   //flipping the colours for EF
     }
 
-    // Initialise a weighted pyramid with zeros
-    weightedImagePyramid[0].assign((float *) level0WeightedImage.data(), (float *) level0WeightedImage.data() + 640 / 1 * 480 / 1);
-    weightedImagePyramid[1].assign((float *) level1WeightedImage.data(), (float *) level1WeightedImage.data() + 640 / 2 * 480 / 2);
-    weightedImagePyramid[2].assign((float *) level2WeightedImage.data(), (float *) level2WeightedImage.data() + 640 / 4 * 480 / 4);
+    // Initialise a weighted pyramid with zero
 
     //Initialise model in EF to the first frame we get
-    ef.eFusion->processFrame(rgbImage, (unsigned short *) cf.depth_full.data, weightedImagePyramid , im_count, 0 , 1);
+    ef.eFusion->processFrame(rgbImage, (unsigned short *) cf.depth_full.data, (float *) level0WeightedImage.data() , im_count, 0 , 1);
 
 
 	//Create the 3D Scene
@@ -157,11 +151,6 @@ int main()
             weightedImage = weightedImageColumnMajor;
             cv::transpose(weightedImage, weightedImage);  //stored in row major order
             cv::resize(weightedImage, fullSizeWeightedImage,  cv::Size(640, 480) , 0,0);  //resize to full image
-            cv::resize(weightedImage, smallestWeightedImage,  cv::Size(640/4, 480/4) , 0,0);  //resize to small image
-
-            weightedImagePyramid[0].assign((float *) fullSizeWeightedImage.data, (float *) fullSizeWeightedImage.data + 640 / 1 * 480 / 1);
-            weightedImagePyramid[1].assign((float *) weightedImage.data, (float *) weightedImage.data + 640 / 2 * 480 / 2);
-            weightedImagePyramid[2].assign((float *) smallestWeightedImage.data, (float *) smallestWeightedImage.data + 640 / 4 * 480 / 4);
 
             rgbImage = cf.color_full.data;
 
@@ -170,7 +159,7 @@ int main()
                 std::swap(rgbImage[i + 0], rgbImage[i + 2]);   //get the colour image of the latest frame
             }
 
-            ef.eFusion->processFrame(rgbImage, (unsigned short *) cf.depth_full.data, weightedImagePyramid, im_count, &(poseEFCoords), 1);
+            ef.eFusion->processFrame(rgbImage, (unsigned short *) cf.depth_full.data, (float *) fullSizeWeightedImage.data, im_count, &(poseEFCoords), 1);
 
             efProcessFrame1 = std::chrono::high_resolution_clock::now();
 

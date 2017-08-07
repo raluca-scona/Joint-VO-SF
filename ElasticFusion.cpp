@@ -307,7 +307,7 @@ bool ElasticFusion::denseEnough(const Img<Eigen::Matrix<unsigned char, 3, 1>> & 
 
 void ElasticFusion::processFrame(const unsigned char * rgb,
                                  const unsigned short * depth,
-                                 std::vector<std::vector<float> > weightedImagePyramid,
+                                 const float * weightedImage,
                                  const int64_t & timestamp,
                                  const Eigen::Matrix4f * inPose,
                                  const float weightMultiplier,
@@ -323,12 +323,12 @@ void ElasticFusion::processFrame(const unsigned char * rgb,
 
     std::vector<unsigned char> weightedImageTexture (Resolution::getInstance().width() * Resolution::getInstance().height() * 3, 0.0);
 
-    for (unsigned int i=0; i<weightedImagePyramid[0].size(); i++) {
-        weightedImageTexture[i*3 + 0] = (unsigned char) (255 * weightedImagePyramid[0][i]);
-        weightedImageTexture[i*3 + 1] = (unsigned char) (255 * weightedImagePyramid[0][i]);
-        weightedImageTexture[i*3 + 2] = (unsigned char) (255 * weightedImagePyramid[0][i]);
+    for (unsigned int i=0; i< 640*480 ; i++) {
+        weightedImageTexture[i*3 + 0] = (unsigned char) (255 * weightedImage[i]);
+        weightedImageTexture[i*3 + 1] = (unsigned char) (255 * weightedImage[i]);
+        weightedImageTexture[i*3 + 2] = (unsigned char) (255 * weightedImage[i]);
 
-        if (weightedImagePyramid[0][i] >= 0.3) {
+        if (weightedImage[i] >= 0.3) {
             * (staticDepth + i) = 0;
         }
     }
@@ -363,107 +363,9 @@ void ElasticFusion::processFrame(const unsigned char * rgb,
 
         bool trackingOk = true;
 
-        if(bootstrap || !inPose)
-        {
-            TICK("autoFill");
-            resize.image(indexMap.imageTex(), imageBuff);
-            bool shouldFillIn = !denseEnough(imageBuff);
-            TOCK("autoFill");
 
-            TICK("odomInit");
-            //WARNING initICP* must be called before initRGB*
-            frameToModel.initICPModel(shouldFillIn ? &fillIn.vertexTexture : indexMap.vertexTex(),
-                                      shouldFillIn ? &fillIn.normalTexture : indexMap.normalTex(),
-                                      maxDepthProcessed, currPose);
-            frameToModel.initRGBModel((shouldFillIn || frameToFrameRGB) ? &fillIn.imageTexture : indexMap.imageTex());
-
-            frameToModel.initWeightedPyramid(weightedImagePyramid);
-
-            frameToModel.initICP(textures[GPUTexture::DEPTH_FILTERED], maxDepthProcessed);
-            frameToModel.initRGB(textures[GPUTexture::RGB]);
-            TOCK("odomInit");
-
-            if(bootstrap)
-            {
-                assert(inPose);
-                currPose = currPose * (*inPose);
-            }
-
-            Eigen::Vector3f trans = currPose.topRightCorner(3, 1);
-            Eigen::Matrix<float, 3, 3, Eigen::RowMajor> rot = currPose.topLeftCorner(3, 3);
-
-            TICK("odom");
-            frameToModel.getIncrementalTransformation(trans,
-                                                      rot,
-                                                      rgbOnly,
-                                                      icpWeight,
-                                                      pyramid,
-                                                      fastOdom,
-                                                      so3);
-            TOCK("odom");
-
-            trackingOk = !reloc || frameToModel.lastICPError < 1e-04;
-
-            if(reloc)
-            {
-                if(!lost)
-                {
-                    Eigen::MatrixXd covariance = frameToModel.getCovariance();
-
-                    for(int i = 0; i < 6; i++)
-                    {
-                        if(covariance(i, i) > 1e-04)
-                        {
-                            trackingOk = false;
-                            break;
-                        }
-                    }
-
-                    if(!trackingOk)
-                    {
-                        trackingCount++;
-
-                        if(trackingCount > 10)
-                        {
-                            lost = true;
-                        }
-                    }
-                    else
-                    {
-                        trackingCount = 0;
-                    }
-                }
-                else if(lastFrameRecovery)
-                {
-                    Eigen::MatrixXd covariance = frameToModel.getCovariance();
-
-                    for(int i = 0; i < 6; i++)
-                    {
-                        if(covariance(i, i) > 1e-04)
-                        {
-                            trackingOk = false;
-                            break;
-                        }
-                    }
-
-                    if(trackingOk)
-                    {
-                        lost = false;
-                        trackingCount = 0;
-                    }
-
-                    lastFrameRecovery = false;
-                }
-            }
-
-            currPose.topRightCorner(3, 1) = trans;
-            currPose.topLeftCorner(3, 3) = rot;
-        }
-        else
-        {
-            std::cout<<"\n External Pose Increment";
-            currPose =   currPose * ( * inPose ) ;
-        }
+        std::cout<<"\n External Pose Increment";
+        currPose =   currPose * ( * inPose ) ;
 
         Eigen::Matrix4f diff = currPose.inverse() * lastPose;
 
@@ -565,17 +467,6 @@ void ElasticFusion::processFrame(const unsigned char * rgb,
 
             modelToModel.initICP(indexMap.vertexTex(), indexMap.normalTex(), maxDepthProcessed);
             modelToModel.initRGB(indexMap.imageTex());
-
-            //weighted pyramid should be 0's here.
-
-            std::vector<std::vector<float> > onesWeightedImagePyramid = weightedImagePyramid;
-            for (unsigned int a=0; a<onesWeightedImagePyramid.size(); a++) {
-                for (unsigned int b=0; b<onesWeightedImagePyramid[a].size(); b++) {
-                    onesWeightedImagePyramid[a][b] = 0;
-                }
-            }
-
-            modelToModel.initWeightedPyramid(onesWeightedImagePyramid);
 
             Eigen::Vector3f trans = currPose.topRightCorner(3, 1);
             Eigen::Matrix<float, 3, 3, Eigen::RowMajor> rot = currPose.topLeftCorner(3, 3);

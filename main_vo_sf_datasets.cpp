@@ -55,10 +55,8 @@ int main()
     cv::Mat weightedImage;
 
     std::vector<float> level0WeightedImage (Resolution::getInstance().width() * Resolution::getInstance().height(), 0.0);
-    std::vector<float> level1WeightedImage (Resolution::getInstance().width() / 2 * Resolution::getInstance().height() / 2, 0.0 );
-    std::vector<float> level2WeightedImage (Resolution::getInstance().width() / 4 * Resolution::getInstance().height() / 4, 0.0 );
 
-    std::vector<std::vector<float> > weightedImagePyramid(3);
+    //std::vector<float> weightedImageVector;
     unsigned char * rgbImage;
 
     cv::Mat colorPrediction = cv::Mat(Resolution::getInstance().height(), Resolution::getInstance().width(), CV_8UC3,  cv::Scalar(0,0,0));
@@ -69,14 +67,11 @@ int main()
     std::chrono::high_resolution_clock::time_point efProcessFrame0;
     std::chrono::high_resolution_clock::time_point efProcessFrame1;
 
-    cv::Mat depthCurrentFilter;
-
     int im_count = 1;
 
     Eigen::Matrix4f poseEFCoords;
     Eigen::Matrix4f poseEF;
     Eigen::Matrix4f poseEFInit = Eigen::Matrix4f::Zero();
-    Eigen::Matrix4f identityMat = Eigen::Matrix4f::Identity();
     Eigen::Quaternionf poseEFInitQuat;
 
     mrpt::math::CQuaternionDouble poseEFInitMrptQuat;
@@ -136,12 +131,8 @@ int main()
         std::swap(rgbImage[i + 0], rgbImage[i + 2]);   //flipping the colours for EF
     }
 
-    // Initialise a weighted pyramid with zeros
-    weightedImagePyramid[0].assign((float *) level0WeightedImage.data(), (float *) level0WeightedImage.data() + 640 / 1 * 480 / 1);
-    weightedImagePyramid[1].assign((float *) level1WeightedImage.data(), (float *) level1WeightedImage.data() + 640 / 2 * 480 / 2);
-    weightedImagePyramid[2].assign((float *) level2WeightedImage.data(), (float *) level2WeightedImage.data() + 640 / 4 * 480 / 4);
     //Initialise model in EF to the first frame we get
-    ef.eFusion->processFrame(rgbImage, (unsigned short *) depth_full.data, weightedImagePyramid , im_count, &(poseEFInit) , 1);
+    ef.eFusion->processFrame(rgbImage, (unsigned short *) depth_full.data,  (float *) level0WeightedImage.data() , im_count, &(poseEFInit) , 1);
 
 	//Auxiliary variables
 	int pushed_key = 0, stop = 0;
@@ -204,11 +195,6 @@ int main()
             weightedImage = weightedImageColumnMajor;
             cv::transpose(weightedImage, weightedImage);  //stored in row major order
             cv::resize(weightedImage, fullSizeWeightedImage,  cv::Size(640, 480) , 0,0);  //resize to full image
-            cv::resize(weightedImage, smallestWeightedImage,  cv::Size(640/4, 480/4) , 0,0);  //resize to small image
-
-            weightedImagePyramid[0].assign((float *) fullSizeWeightedImage.data, (float *) fullSizeWeightedImage.data + 640 / 1 * 480 / 1);
-            weightedImagePyramid[1].assign((float *) weightedImage.data, (float *) weightedImage.data + 640 / 2 * 480 / 2);
-            weightedImagePyramid[2].assign((float *) smallestWeightedImage.data, (float *) smallestWeightedImage.data + 640 / 4 * 480 / 4);
 
             poseEFCoords = ef.fromVisToNom * cf.T_odometry * ef.fromNomToVis; //EF uses the coordinate frame with Z forwards, Y upwards
 
@@ -217,7 +203,7 @@ int main()
             cf.ef_cam_oldpose = mrpt::poses::CPose3D(poseEFMrptMat);
 
             //pyramid will no longer be needed because we use cf for tracking anyway
-            ef.eFusion->processFrame(rgbImage, (unsigned short *) depth_full.data, weightedImagePyramid, im_count, &(poseEFCoords), 1);
+            ef.eFusion->processFrame(rgbImage, (unsigned short *) depth_full.data, (float *) fullSizeWeightedImage.data, im_count, &(poseEFCoords), 1);
 
             poseEF = ef.eFusion->getCurrPose() * ef.fromVisToNom;
             poseEFMrptMat =  mrpt::math::CMatrixDouble44(poseEF);
@@ -287,12 +273,6 @@ int main()
             weightedImage = weightedImageColumnMajor;
             cv::transpose(weightedImage, weightedImage);  //stored in row major order
             cv::resize(weightedImage, fullSizeWeightedImage,  cv::Size(640, 480) , 0,0);  //resize to full image
-            cv::resize(weightedImage, smallestWeightedImage,  cv::Size(640/4, 480/4) , 0,0);  //resize to small image
-
-            weightedImagePyramid[0].assign((float *) fullSizeWeightedImage.data, (float *) fullSizeWeightedImage.data + 640 / 1 * 480 / 1);
-            weightedImagePyramid[1].assign((float *) weightedImage.data, (float *) weightedImage.data + 640 / 2 * 480 / 2);
-            weightedImagePyramid[2].assign((float *) smallestWeightedImage.data, (float *) smallestWeightedImage.data + 640 / 4 * 480 / 4);
-
 
             rgbImage = color_full.data;
 
@@ -305,16 +285,13 @@ int main()
             poseEFMrptMat =  mrpt::math::CMatrixDouble44(poseEF);
             cf.ef_cam_oldpose = mrpt::poses::CPose3D(poseEFMrptMat);
 
-            ef.eFusion->processFrame(rgbImage, (unsigned short *) depth_full.data, weightedImagePyramid, im_count, &(poseEFCoords), 1);
+            ef.eFusion->processFrame(rgbImage, (unsigned short *) depth_full.data,   (float *) fullSizeWeightedImage.data, im_count, &(poseEFCoords), 1);
 
             poseEF = ef.eFusion->getCurrPose() * ef.fromVisToNom;
             poseEFMrptMat =  mrpt::math::CMatrixDouble44(poseEF);
             cf.ef_cam_pose = mrpt::poses::CPose3D(poseEFMrptMat);
 
             ef.updateGUI();
-
-
-
 
             cf.createImagesOfSegmentations();
 			if (save_results)

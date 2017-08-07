@@ -195,21 +195,21 @@ void VO_SF::optimizeSegmentation(Matrix<float, NUM_LABELS, 1> &r)
         label_dynamic[l] = false;
         b_segm[l] = 0.f;
 
-//		if (b_segm[l] > 0.667f)
-//		{
-//			label_static[l] = false;
-//			label_dynamic[l] = true;
-//		}
-//		else if (b_segm[l] < 0.333f)
-//		{
-//			label_dynamic[l] = false;
-//			label_static[l] = true;
-//		}
-//		else
-//		{
-//			label_dynamic[l] = true;
-//			label_static[l] = true;
-//		}
+//        if (b_segm[l] > 0.667f)
+//        {
+//            label_static[l] = false;
+//            label_dynamic[l] = true;
+//        }
+//        else if (b_segm[l] < 0.333f)
+//        {
+//            label_dynamic[l] = false;
+//            label_static[l] = true;
+//        }
+//        else
+//        {
+//            label_dynamic[l] = true;
+//            label_static[l] = true;
+//        }
 	}
 }
 

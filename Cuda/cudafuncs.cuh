@@ -78,8 +78,8 @@ void icpStep(const mat33& Rcurr,
              float * vectorB_host,
              float * residual_host,
              int threads,
-             int blocks, 
-	     const DeviceArray2D<float>& current_image_weight);
+             int blocks
+             );
 
 void rgbStep(const DeviceArray2D<DataTerm> & corresImg,
              const float & sigma,
@@ -94,8 +94,8 @@ void rgbStep(const DeviceArray2D<DataTerm> & corresImg,
              float * matrixA_host,
              float * vectorB_host,
              int threads,
-             int blocks, 
-	     const DeviceArray2D<float>& current_image_weight);
+             int blocks
+             );
 
 void so3Step(const DeviceArray2D<unsigned char> & lastImage,
              const DeviceArray2D<unsigned char> & nextImage,
@@ -108,8 +108,8 @@ void so3Step(const DeviceArray2D<unsigned char> & lastImage,
              float * vectorB_host,
              float * residual_host,
              int threads,
-             int blocks, 
-	     const DeviceArray2D<float>& current_image_weight);
+             int blocks
+             );
 
 void computeRgbResidual(const float & minScale,
                         const DeviceArray2D<short> & dIdx,

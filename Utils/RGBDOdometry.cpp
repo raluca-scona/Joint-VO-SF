@@ -77,8 +77,6 @@ RGBDOdometry::RGBDOdometry(int width,
     intr.fx = fx;
     intr.fy = fy;
 
-    weightedImagePyramid.resize(NUM_PYRS);
-
     iterations.reserve(NUM_PYRS);
 
     depth_tmp.resize(NUM_PYRS);
@@ -101,8 +99,6 @@ RGBDOdometry::RGBDOdometry(int width,
 
         vmaps_curr_[i].create (pyr_rows*3, pyr_cols);
         nmaps_curr_[i].create (pyr_rows*3, pyr_cols);
-
-        weightedImagePyramid[i].create (pyr_rows, pyr_cols);
     }
 
     vmaps_tmp.create(height * 4 * width);
@@ -144,21 +140,6 @@ void RGBDOdometry::initICP(GPUTexture * filteredDepth, const float depthCutoff)
 
     cudaDeviceSynchronize();
 }
-
-void RGBDOdometry::initWeightedPyramid(std::vector<std::vector<float> > weightedPyr) {
-
-    int level = 1;
-    for (unsigned int i=0; i<weightedPyr.size(); i++) {
-        int currWidth = width / level;
-        int currHeight = height / level;
-
-        weightedImagePyramid[i].upload(&weightedPyr[i][0], currWidth*4, currHeight, currWidth);
-
-        level = level * 2;
-    }
-
-}
-
 
 void RGBDOdometry::initICP(GPUTexture * predictedVertices, GPUTexture * predictedNormals, const float depthCutoff)
 {
@@ -349,8 +330,6 @@ void RGBDOdometry::getIncrementalTransformation(Eigen::Vector3f & trans,
 
             float residual[2];
 
-            DeviceArray2D<float>& current_image_weight = weightedImagePyramid[pyramidLevel]; //its correct now
-
             TICK("so3Step");
             so3Step(lastNextImage[pyramidLevel],
                     nextImage[pyramidLevel],
@@ -363,8 +342,8 @@ void RGBDOdometry::getIncrementalTransformation(Eigen::Vector3f & trans,
                     jtr.data(),
                     &residual[0],
                     GPUConfig::getInstance().so3StepThreads,
-                    GPUConfig::getInstance().so3StepBlocks,
-                    current_image_weight);
+                    GPUConfig::getInstance().so3StepBlocks
+                    );
             TOCK("so3Step");
 
             lastSO3Error = sqrt(residual[0]) / residual[1];
@@ -509,8 +488,6 @@ void RGBDOdometry::getIncrementalTransformation(Eigen::Vector3f & trans,
             DeviceArray2D<float>& vmap_g_prev = vmaps_g_prev_[i];
             DeviceArray2D<float>& nmap_g_prev = nmaps_g_prev_[i];
 
-            DeviceArray2D<float>& current_image_weight = weightedImagePyramid[i]; //its correct now
-
             float residual[2];
 
             if(icp)
@@ -533,8 +510,8 @@ void RGBDOdometry::getIncrementalTransformation(Eigen::Vector3f & trans,
                         b_icp.data(),
                         &residual[0],
                         GPUConfig::getInstance().icpStepThreads,
-                        GPUConfig::getInstance().icpStepBlocks,
-                        current_image_weight);
+                        GPUConfig::getInstance().icpStepBlocks
+                        );
                 TOCK("icpStep");
             }
 
@@ -560,8 +537,8 @@ void RGBDOdometry::getIncrementalTransformation(Eigen::Vector3f & trans,
                         A_rgbd.data(),
                         b_rgbd.data(),
                         GPUConfig::getInstance().rgbStepThreads,
-                        GPUConfig::getInstance().rgbStepBlocks,
-                        current_image_weight);
+                        GPUConfig::getInstance().rgbStepBlocks
+                        );
                 TOCK("rgbStep");
             }
 
