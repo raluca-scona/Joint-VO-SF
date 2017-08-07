@@ -1161,7 +1161,7 @@ void VO_SF::run_VO_SF(bool create_image_pyr)
                 warpImagesAccurate(); // forward warping, more precise
 
 			//2. Compute inter coords (better linearization of the range and optical flow constraints)
-			computeCoordsParallel();
+			computeCoords)();
 
 			//3. Compute derivatives
 			calculateDerivatives();

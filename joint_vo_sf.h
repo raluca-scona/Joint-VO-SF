@@ -35,7 +35,6 @@
 #include <opencv2/opencv.hpp>
 
 
-
 #define NUM_LABELS 24
 
 typedef Eigen::Matrix<float, 6, 1> Vector6f;
@@ -93,7 +92,7 @@ public:
 	Eigen::Matrix4f T_clusters[NUM_LABELS];					//Rigid transformations estimated for each cluster
 	Eigen::Matrix4f T_odometry;								//Rigid transformation of the camera motion (odometry)
 	Vector6f twist_odometry, twist_level_odometry;			//Twist encoding the odometry (accumulated and local for the pyramid level)	
-	mrpt::poses::CPose3D cam_pose, cam_oldpose;				//Estimated camera poses (current and prev)
+    mrpt::poses::CPose3D cam_pose, cam_oldpose, ef_cam_pose, ef_cam_oldpose;				//Estimated camera poses (current and prev)
 
 	//Parameters
     float fovh, fovv;							//Field of view of the camera (intrinsic calibration)

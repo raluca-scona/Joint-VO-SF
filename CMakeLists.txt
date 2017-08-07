@@ -8,30 +8,60 @@ endif(COMMAND cmake_policy)
 # custom cmake modules
 LIST(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake_modules)
 
-#some hacking for finding EF from CF - temporary
-message(STATUS ${EFUSION_LIBRARY})
-find_package(efusion REQUIRED)
+#set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}")
+
+MESSAGE(STATUS "CMAKE_MODULE_PATH:   " ${CMAKE_MODULE_PATH})
+
 find_package(Pangolin 0.1 REQUIRED)
 find_package(CUDA REQUIRED)
+find_package(SuiteSparse REQUIRED)
 
 #Find dependencies (Eigen is included in MRPT)
-FIND_PACKAGE(MRPT REQUIRED base gui opengl obs)
-FIND_PACKAGE(OpenCV REQUIRED)
-FIND_PACKAGE(OpenNI2 REQUIRED)
-FIND_PACKAGE(TBB REQUIRED)
+find_package(MRPT REQUIRED base gui opengl obs)
+find_package(OpenCV REQUIRED)
+find_package(OpenNI2 REQUIRED)
+find_package(TBB REQUIRED)
 
-INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR})
-INCLUDE_DIRECTORIES(${OpenNI2_INCLUDE_DIRS})
-INCLUDE_DIRECTORIES(${TBB_INCLUDE_DIRS})
+set(efusion_SHADER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Shaders" CACHE PATH "Where the shaders live")
 
-#ef
-include_directories(${EFUSION_INCLUDE_DIR})
+include_directories(${PROJECT_SOURCE_DIR})
+include_directories(${OpenNI2_INCLUDE_DIRS})
+include_directories(${TBB_INCLUDE_DIRS})
+
 include_directories(${Pangolin_INCLUDE_DIRS})
 include_directories(${CUDA_INCLUDE_DIRS})
+include_directories(${EIGEN_INCLUDE_DIRS})
+include_directories(${SUITESPARSE_INCLUDE_DIRS})
+include_directories(${OpenCV_INCLUDE_DIRS})
 
+file(GLOB ef_srcs Deformation.cpp ElasticFusion.cpp Ferns.cpp GlobalModel.cpp GPUTexture.cpp IndexMap.cpp)
+file(GLOB ef_utils_srcs Utils/*.cpp)
+file(GLOB ef_shader_srcs Shaders/*.cpp)
+file(GLOB ef_cuda Cuda/*.cu Cuda/*.cuh)
+file(GLOB ef_containers Cuda/containers/*.cpp)
+
+set(CUDA_ARCH_BIN "20 30 35 50 52" CACHE STRING "Specify 'real' GPU arch to build binaries for, BIN(PTX) format is supported. Example: 1.3 2.1(1.3) or 13 21(13)")
+set(CUDA_ARCH_PTX "" CACHE STRING "Specify 'virtual' PTX arch to build PTX intermediate code for. Example: 1.0 1.2 or 10 12")              
+
+SET(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR})
+include(CudaComputeTargetFlags.cmake)                  
+APPEND_TARGET_ARCH_FLAGS()
+
+set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS}  "-Xcompiler;-fPIC;")           
+set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} "--ftz=true;--prec-div=false;--prec-sqrt=false") 
+
+CUDA_COMPILE(ef_cuda_objs ${ef_cuda})
+
+set(CMAKE_CXX_FLAGS "-O3 -msse2 -msse3 -Wall -std=c++11 -DSHADER_DIR=${efusion_SHADER_DIR}")
 
 
 ADD_LIBRARY(vo_sf_lib
+   ${ef_srcs}
+   ${ef_utils_srcs}
+   ${ef_shader_srcs}
+   ${ef_cuda} 
+   ${ef_cuda_objs} 
+   ${ef_containers}
 	joint_vo_sf.h
 	structs_parallelization.h
 	kmeans.cpp
@@ -42,17 +72,20 @@ ADD_LIBRARY(vo_sf_lib
 	camera.h
 	datasets.cpp
 	datasets.h
+   ef.h
+   GUI.h
 	normal_equation.cpp
-	opencv_ext.cpp)
+	opencv_ext.cpp
+)
 	
 TARGET_LINK_LIBRARIES(vo_sf_lib
 	${MRPT_LIBS}
 	${OpenNI2_LIBRARY}
 	${OpenCV_LIBS}
-    ${TBB_LIBRARIES}
-    ${EFUSION_LIBRARY}  #more EF stuff here
-    ${Pangolin_LIBRARIES}
-    ${CUDA_LIBRARIES}
+   ${TBB_LIBRARIES}
+   ${Pangolin_LIBRARIES}
+   ${CUDA_LIBRARIES}
+   ${SUITESPARSE_LIBRARIES}
 )
 	
 		

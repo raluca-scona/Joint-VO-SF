@@ -121,6 +121,11 @@ void VO_SF::initializeSceneDatasets()
 	reference_est->setScale(0.15);
 	scene->insert( reference_est );
 
+    //Reference est
+    opengl::CSetOfObjectsPtr ef_reference_est = opengl::stock_objects::CornerXYZ();
+    ef_reference_est->setScale(0.15);
+    scene->insert( ef_reference_est );
+
 	//Segmented points (original)
 	opengl::CPointCloudColouredPtr seg_points = opengl::CPointCloudColoured::Create();
 	seg_points->setColor(1,0,0);
@@ -133,6 +138,12 @@ void VO_SF::initializeSceneDatasets()
 	estimated_traj->setColor(1.f, 0.f, 0.f);
 	estimated_traj->setLineWidth(5.f);
 	scene->insert(estimated_traj);
+
+    //EF Estimated trajectory
+    opengl::CSetOfLinesPtr ef_estimated_traj = opengl::CSetOfLines::Create();
+    ef_estimated_traj->setColor(0.f, 0.f, 1.f);
+    ef_estimated_traj->setLineWidth(5.f);
+    scene->insert(ef_estimated_traj);
 
 	//GT trajectory
 	opengl::CSetOfLinesPtr gt_traj = opengl::CSetOfLines::Create();
@@ -312,9 +323,9 @@ void VO_SF::updateSceneDatasets(const CPose3D &gt, const CPose3D &gt_old)
 	CImage image;
 
 	//Refs
-	const MatrixXf &depth_ref = depth[repr_level];
-	const MatrixXf &yy_ref = yy[repr_level];
-	const MatrixXf &xx_ref = xx[repr_level];
+    const MatrixXf &depth_ref = depth[repr_level];
+    const MatrixXf &yy_ref = yy[repr_level];
+    const MatrixXf &xx_ref = xx[repr_level];
 	
 	scene = window.get3DSceneAndLock();
 
@@ -326,6 +337,10 @@ void VO_SF::updateSceneDatasets(const CPose3D &gt, const CPose3D &gt_old)
 	opengl::CSetOfObjectsPtr reference_est = scene->getByClass<CSetOfObjects>(1);
 	reference_est->setPose(cam_pose);
 	scene->insert( reference_est );
+
+    opengl::CSetOfObjectsPtr ef_reference_est = scene->getByClass<CSetOfObjects>(2);
+    ef_reference_est->setPose(ef_cam_pose);
+    scene->insert( ef_reference_est );
 
 	//Points
 	opengl::CPointCloudColouredPtr points = scene->getByClass<CPointCloudColoured>(0);
@@ -340,16 +355,19 @@ void VO_SF::updateSceneDatasets(const CPose3D &gt, const CPose3D &gt_old)
 
 
 	//Trajectories
-	opengl::CSetOfLinesPtr estimated_traj = scene->getByClass<CSetOfLines>(0);
-	estimated_traj->appendLine(cam_pose[0], cam_pose[1], cam_pose[2], cam_oldpose[0], cam_oldpose[1], cam_oldpose[2]);
+    opengl::CSetOfLinesPtr estimated_traj = scene->getByClass<CSetOfLines>(0);
+    estimated_traj->appendLine(cam_pose[0], cam_pose[1], cam_pose[2], cam_oldpose[0], cam_oldpose[1], cam_oldpose[2]);
 
-	opengl::CSetOfLinesPtr gt_traj = scene->getByClass<CSetOfLines>(1);
+    opengl::CSetOfLinesPtr ef_estimated_traj = scene->getByClass<CSetOfLines>(1);
+    ef_estimated_traj->appendLine(ef_cam_pose[0], ef_cam_pose[1], ef_cam_pose[2], ef_cam_oldpose[0], ef_cam_oldpose[1], ef_cam_oldpose[2]);
+
+    opengl::CSetOfLinesPtr gt_traj = scene->getByClass<CSetOfLines>(2);
 	gt_traj->appendLine(gt[0], gt[1], gt[2], gt_old[0], gt_old[1], gt_old[2]);
 
 
 	//Image
 	COpenGLViewportPtr vp_image = scene->getViewport("image");
-    image.setFromRGBMatrices(im_r_old, im_g_old, im_b_old, true);
+    image.setFromRGBMatrices(im_r, im_g, im_b, true);
     image.flipVertical();
 	//image.flipHorizontal();
     vp_image->setImageView(image);
@@ -372,9 +390,9 @@ void VO_SF::updateSceneDatasets(const CPose3D &gt, const CPose3D &gt_old)
 	window.repaint();
 
 	//Only used for the visualization (assuming here that the update method is only called once per new frame)
-    im_r_old.swap(im_r);
-    im_g_old.swap(im_g);
-    im_b_old.swap(im_b);
+//    im_r_old.swap(im_r);
+//    im_g_old.swap(im_g);
+//    im_b_old.swap(im_b);
 
 }
 
@@ -501,6 +519,7 @@ void VO_SF::createImagesOfSegmentations()
 
 	//Refs
 	const Matrix<float, NUM_LABELS+1, Dynamic> label_funct_ref = label_funct[image_level];
+
     const MatrixXf &depth_ref = depth[image_level];
 
     //Associate colors to labels

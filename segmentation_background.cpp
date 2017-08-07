@@ -189,21 +189,27 @@ void VO_SF::optimizeSegmentation(Matrix<float, NUM_LABELS, 1> &r)
 	//Classify clusters as static, uncertain or moving
 	for (unsigned int l=0; l<NUM_LABELS; l++)
 	{
-		if (b_segm[l] > 0.667f) 
-		{
-			label_static[l] = false;
-			label_dynamic[l] = true;
-		}
-		else if (b_segm[l] < 0.333f)
-		{
-			label_dynamic[l] = false;
-			label_static[l] = true;
-		}
-		else
-		{
-			label_dynamic[l] = true;
-			label_static[l] = true;			
-		}
+
+
+        label_static[l] = true;
+        label_dynamic[l] = false;
+        b_segm[l] = 0.f;
+
+//		if (b_segm[l] > 0.667f)
+//		{
+//			label_static[l] = false;
+//			label_dynamic[l] = true;
+//		}
+//		else if (b_segm[l] < 0.333f)
+//		{
+//			label_dynamic[l] = false;
+//			label_static[l] = true;
+//		}
+//		else
+//		{
+//			label_dynamic[l] = true;
+//			label_static[l] = true;
+//		}
 	}
 }
 

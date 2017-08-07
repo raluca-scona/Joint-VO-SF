@@ -75,6 +75,8 @@ int main()
 
     cv::Mat colorPrediction;
     cv::Mat depthPrediction;
+    cv::Mat weightPrediction;
+
 
     Eigen::Matrix4f poseEFCoords;
 
@@ -127,7 +129,7 @@ int main()
             efProcessFrame0 = std::chrono::high_resolution_clock::now();
 
             //Got images from the model, should overwrite the old images and re-do the pyramid
-            ef.eFusion->getPredictedImages(colorPrediction, depthPrediction);
+            ef.eFusion->getPredictedImages(colorPrediction, depthPrediction, weightPrediction);
 
             //overwriting the previous colour and depth images
             for (unsigned int v=0; v<cf.height; v++) {

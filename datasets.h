@@ -37,6 +37,8 @@ public:
 
     Datasets(unsigned int res_factor);
 
+    typedef Eigen::Matrix<float, 6, 1> Vector6f;
+
 	unsigned int rawlog_count;
 	unsigned int last_gt_row;
 	unsigned int downsample;
@@ -54,9 +56,11 @@ public:
 	bool dataset_finished;
 
     void openRawlog();
-    void loadFrameAndPoseFromDataset(Eigen::MatrixXf &depth_wf, Eigen::MatrixXf &intensity_wf, Eigen::MatrixXf &im_r, Eigen::MatrixXf &im_g,Eigen::MatrixXf &im_b, cv::Mat depth_full, cv::Mat color_full);
+    void loadFrameAndPoseFromDataset(Eigen::MatrixXf &depth_wf, Eigen::MatrixXf &intensity_wf, Eigen::MatrixXf &im_r, Eigen::MatrixXf &im_g,Eigen::MatrixXf &im_b, cv::Mat & depth_full, cv::Mat & color_full);
 	void CreateResultsFile();
 	void writeTrajectoryFile(mrpt::poses::CPose3D &cam_pose, Eigen::MatrixXf &ddt);
+    void writeTwistsToFile(Vector6f twist, Eigen::MatrixXf &ddt);
+
 };
 
 

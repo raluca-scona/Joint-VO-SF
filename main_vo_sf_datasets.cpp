@@ -27,6 +27,11 @@
 #include <datasets.h>
 
 
+#include <chrono>
+#include <iostream>
+#include <fstream>
+
+
 // -------------------------------------------------------------------------------
 //								Instructions:
 // You need to click on the window of the 3D Scene to be able to interact with it.
@@ -56,20 +61,33 @@ int main()
     std::vector<std::vector<float> > weightedImagePyramid(3);
     unsigned char * rgbImage;
 
-    cv::Mat colorPrediction;
-    cv::Mat depthPrediction;
+    cv::Mat colorPrediction = cv::Mat(Resolution::getInstance().height(), Resolution::getInstance().width(), CV_8UC3,  cv::Scalar(0,0,0));
+    cv::Mat depthPrediction = cv::Mat(Resolution::getInstance().height(), Resolution::getInstance().width(), CV_32FC1, 0.0);
+    cv::Mat weightPrediction = cv::Mat(Resolution::getInstance().height(), Resolution::getInstance().width(), CV_32FC1, 0.0);
+
+    std::chrono::duration<double, std::milli> processFrameDuration;
+    std::chrono::high_resolution_clock::time_point efProcessFrame0;
+    std::chrono::high_resolution_clock::time_point efProcessFrame1;
+
+    cv::Mat depthCurrentFilter;
 
     int im_count = 1;
 
     Eigen::Matrix4f poseEFCoords;
+    Eigen::Matrix4f poseEF;
+    Eigen::Matrix4f poseEFInit = Eigen::Matrix4f::Zero();
+    Eigen::Matrix4f identityMat = Eigen::Matrix4f::Identity();
+    Eigen::Quaternionf poseEFInitQuat;
+
+    mrpt::math::CQuaternionDouble poseEFInitMrptQuat;
+    mrpt::math::CMatrixDouble44 poseEFMrptMat;
+    mrpt::poses::CPose3D gtToVis, poseEFInitMrpt;
+    gtToVis.setFromValues(0,0,0, 0.5*M_PI, 0, 0.5*M_PI); //Needed because we use different coordinates
 
     const float norm_factor = 1.f/255.f;
 
-
     //                                  DONE WITH EF PARAMS
     // -------------------------------------------------------------------------------
-
-
 
 	const bool save_results = true;
     unsigned int res_factor = 2;
@@ -79,10 +97,12 @@ int main()
     cv::Mat depth_full = cv::Mat(cf.height * res_factor, cf.width * res_factor,  CV_16U, 0.0);
     cv::Mat color_full = cv::Mat(cf.height * res_factor, cf.width * res_factor,  CV_8UC3,  cv::Scalar(0,0,0));
 
-
 	//Set dir of the Rawlog file
-    dataset.filename = "/usr/prakt/p025/datasets/tum-benchmark-mrpt/rawlog_rgbd_dataset_freiburg3_walking_static/rgbd_dataset_freiburg3_walking_static.rawlog";
-   // dataset.filename = "/usr/prakt/p025/datasets/tum-benchmark-mrpt/rawlog_rgbd_dataset_freiburg2_desk_with_person/rgbd_dataset_freiburg2_desk_with_person.rawlog";
+  //  dataset.filename = "/usr/prakt/p025/datasets/tum-benchmark-mrpt/rawlog_rgbd_dataset_freiburg3_walking_static/rgbd_dataset_freiburg3_walking_static.rawlog";
+  //  dataset.filename = "/usr/prakt/p025/datasets/tum-benchmark-mrpt/rawlog_rgbd_dataset_freiburg3_walking_xyz/rgbd_dataset_freiburg3_walking_xyz.rawlog";
+
+  //  dataset.filename = "/usr/prakt/p025/datasets/tum-benchmark-mrpt/rawlog_rgbd_dataset_freiburg2_desk_with_person/rgbd_dataset_freiburg2_desk_with_person.rawlog";
+    dataset.filename = "/usr/prakt/p025/datasets/tum-benchmark-mrpt/rawlog_rgbd_dataset_freiburg1_desk/rgbd_dataset_freiburg1_desk.rawlog"; //ok
 
 	//Create the 3D Scene
 	cf.initializeSceneDatasets();
@@ -92,21 +112,36 @@ int main()
 		dataset.CreateResultsFile();
     dataset.openRawlog();
 
-    dataset.loadFrameAndPoseFromDataset(cf.depth_wf_old, cf.intensity_wf_old, cf.im_r_old, cf.im_g_old, cf.im_b_old, depth_full, color_full);
+    dataset.loadFrameAndPoseFromDataset(cf.depth_wf, cf.intensity_wf, cf.im_r, cf.im_g, cf.im_b, depth_full, color_full);
+    cf.color_full = color_full;
     cf.cam_pose = dataset.gt_pose; cf.cam_oldpose = dataset.gt_pose;
+
+    //initialisation pose for EF
+    poseEFInitMrpt = dataset.gt_pose;
+    poseEFInitMrpt.getAsQuaternion(poseEFInitMrptQuat);
+    poseEFInitQuat.w() = poseEFInitMrptQuat.r();
+    poseEFInitQuat.x() = poseEFInitMrptQuat.x();
+    poseEFInitQuat.y() = poseEFInitMrptQuat.y();
+    poseEFInitQuat.z() = poseEFInitMrptQuat.z();
+    poseEFInit.topLeftCorner(3, 3) = poseEFInitQuat.normalized().toRotationMatrix();
+    poseEFInit(0, 3) = poseEFInitMrpt[0];
+    poseEFInit(1, 3) = poseEFInitMrpt[1];
+    poseEFInit(2, 3) = poseEFInitMrpt[2];
+    poseEFInit(3, 3) = 1;
+    poseEFInit =  poseEFInit * ef.fromNomToVis;
 
     rgbImage = color_full.data;
     for(int i = 0; i < 640 * 480 * 3; i += 3)
     {
         std::swap(rgbImage[i + 0], rgbImage[i + 2]);   //flipping the colours for EF
     }
+
     // Initialise a weighted pyramid with zeros
     weightedImagePyramid[0].assign((float *) level0WeightedImage.data(), (float *) level0WeightedImage.data() + 640 / 1 * 480 / 1);
     weightedImagePyramid[1].assign((float *) level1WeightedImage.data(), (float *) level1WeightedImage.data() + 640 / 2 * 480 / 2);
     weightedImagePyramid[2].assign((float *) level2WeightedImage.data(), (float *) level2WeightedImage.data() + 640 / 4 * 480 / 4);
     //Initialise model in EF to the first frame we get
-    ef.eFusion->processFrame(rgbImage, (unsigned short *) depth_full.data, weightedImagePyramid , im_count, 0 , 1);
-
+    ef.eFusion->processFrame(rgbImage, (unsigned short *) depth_full.data, weightedImagePyramid , im_count, &(poseEFInit) , 1);
 
 	//Auxiliary variables
 	int pushed_key = 0, stop = 0;
@@ -124,14 +159,12 @@ int main()
 			
         //Load new frame and solve
 		case  'n':
-            dataset.loadFrameAndPoseFromDataset(cf.depth_wf, cf.intensity_wf, cf.im_r, cf.im_g, cf.im_b, depth_full, color_full);
 
-            im_count++;
+            efProcessFrame0 = std::chrono::high_resolution_clock::now();
+
 
             //Got images from the model, should overwrite the old images and re-do the pyramid
-            ef.eFusion->getPredictedImages(colorPrediction, depthPrediction);
-
-            std::cout<<cf.height<<" "<<cf.width<<"\n";
+            ef.eFusion->getPredictedImages(colorPrediction, depthPrediction, weightPrediction);
 
             //overwriting the previous colour and depth images
             for (unsigned int v=0; v<cf.height; v++) {
@@ -144,16 +177,106 @@ int main()
                     cf.intensity_wf_old(v,u) = 0.299f* cf.im_r_old(v,u) + 0.587f*cf.im_g_old(v,u) + 0.114f*cf.im_b_old(v,u);
 
                     cf.depth_wf_old(v,u) = depthPrediction.at<float>(res_factor*v, res_factor*u);
+
                 }
             }
 
-
             cf.createImagePyramid(true);   //pyramid for the old model
+
+            dataset.loadFrameAndPoseFromDataset(cf.depth_wf, cf.intensity_wf, cf.im_r, cf.im_g, cf.im_b, depth_full, color_full);
+
+            cf.depth_full = depth_full;
+            cf.color_full = color_full;
+
+            rgbImage = color_full.data;
+
+            for(int i = 0; i < 640 * 480 * 3; i += 3)
+            {
+                std::swap(rgbImage[i + 0], rgbImage[i + 2]);   //get the colour image of the latest frame
+            }
 
             cf.run_VO_SF(true);
 
-            std::cout<<"also  here\n";
+            weightedImageColumnMajor = cv::Mat(320, 240, CV_32F, cf.b_segm_image_warped.data()); //Eigen returns data in column-major
+            //When running in this mode, images are flipped upside down. If I want to pass them in their original orientation, I need to do flip them.
+            //Now I am just passing them as they have been preprocessed in CF, so upside down.
+            //cv::flip(weightedImageColumnMajor, weightedImage, 1);
+            weightedImage = weightedImageColumnMajor;
+            cv::transpose(weightedImage, weightedImage);  //stored in row major order
+            cv::resize(weightedImage, fullSizeWeightedImage,  cv::Size(640, 480) , 0,0);  //resize to full image
+            cv::resize(weightedImage, smallestWeightedImage,  cv::Size(640/4, 480/4) , 0,0);  //resize to small image
 
+            weightedImagePyramid[0].assign((float *) fullSizeWeightedImage.data, (float *) fullSizeWeightedImage.data + 640 / 1 * 480 / 1);
+            weightedImagePyramid[1].assign((float *) weightedImage.data, (float *) weightedImage.data + 640 / 2 * 480 / 2);
+            weightedImagePyramid[2].assign((float *) smallestWeightedImage.data, (float *) smallestWeightedImage.data + 640 / 4 * 480 / 4);
+
+            poseEFCoords = ef.fromVisToNom * cf.T_odometry * ef.fromNomToVis; //EF uses the coordinate frame with Z forwards, Y upwards
+
+            poseEF = ef.eFusion->getCurrPose() * ef.fromVisToNom;
+            poseEFMrptMat =  mrpt::math::CMatrixDouble44(poseEF);
+            cf.ef_cam_oldpose = mrpt::poses::CPose3D(poseEFMrptMat);
+
+            //pyramid will no longer be needed because we use cf for tracking anyway
+            ef.eFusion->processFrame(rgbImage, (unsigned short *) depth_full.data, weightedImagePyramid, im_count, &(poseEFCoords), 1);
+
+            poseEF = ef.eFusion->getCurrPose() * ef.fromVisToNom;
+            poseEFMrptMat =  mrpt::math::CMatrixDouble44(poseEF);
+            cf.ef_cam_pose = mrpt::poses::CPose3D(poseEFMrptMat);
+
+            ef.updateGUI();
+
+            efProcessFrame1 = std::chrono::high_resolution_clock::now();
+            processFrameDuration = efProcessFrame1 - efProcessFrame0;
+            std::cout<<"\n Run-time of whole thing "<<processFrameDuration.count()<<"\n";
+
+            cf.createImagesOfSegmentations();
+            if (save_results)
+                dataset.writeTrajectoryFile(cf.ef_cam_pose, cf.ddt);
+            anything_new = 1;
+
+            if (dataset.dataset_finished)
+                continuous_exec = false;
+
+            break;
+
+        //Turn on/off continuous estimation
+        case 's':
+            continuous_exec = !continuous_exec;
+            break;
+		
+		//Close the program
+		case 'e':
+			stop = 1;
+			break;
+		}
+
+        if (continuous_exec)
+        {
+
+            //Got images from the model, should overwrite the old images and re-do the pyramid
+            ef.eFusion->getPredictedImages(colorPrediction, depthPrediction, weightPrediction);
+
+            //overwriting the previous colour and depth images
+            for (unsigned int v=0; v<cf.height; v++) {
+                for (unsigned int u=0; u<cf.width; u++)
+                {
+                    cv::Vec3b color_here = colorPrediction.at<cv::Vec3b>(res_factor*v, res_factor*u);
+                    cf.im_r_old(v,u) = norm_factor*color_here[0];
+                    cf.im_g_old(v,u) = norm_factor*color_here[1];
+                    cf.im_b_old(v,u) = norm_factor*color_here[2];
+                    cf.intensity_wf_old(v,u) = 0.299f* cf.im_r_old(v,u) + 0.587f*cf.im_g_old(v,u) + 0.114f*cf.im_b_old(v,u);
+
+                   cf.depth_wf_old(v,u) = depthPrediction.at<float>(res_factor*v, res_factor*u) ;
+                }
+            }
+
+            cf.createImagePyramid(true);   //pyramid for the old model
+
+            dataset.loadFrameAndPoseFromDataset(cf.depth_wf, cf.intensity_wf, cf.im_r, cf.im_g, cf.im_b, depth_full, color_full);
+            cf.depth_full = depth_full;
+            cf.color_full = color_full;
+
+            cf.run_VO_SF(true);
 
             poseEFCoords = ef.fromVisToNom * cf.T_odometry * ef.fromNomToVis; //EF uses the coordinate frame with Z forwards, Y upwards
 
@@ -170,6 +293,7 @@ int main()
             weightedImagePyramid[1].assign((float *) weightedImage.data, (float *) weightedImage.data + 640 / 2 * 480 / 2);
             weightedImagePyramid[2].assign((float *) smallestWeightedImage.data, (float *) smallestWeightedImage.data + 640 / 4 * 480 / 4);
 
+
             rgbImage = color_full.data;
 
             for(int i = 0; i < 640 * 480 * 3; i += 3)
@@ -177,39 +301,24 @@ int main()
                 std::swap(rgbImage[i + 0], rgbImage[i + 2]);   //get the colour image of the latest frame
             }
 
+            poseEF = ef.eFusion->getCurrPose() * ef.fromVisToNom;
+            poseEFMrptMat =  mrpt::math::CMatrixDouble44(poseEF);
+            cf.ef_cam_oldpose = mrpt::poses::CPose3D(poseEFMrptMat);
+
             ef.eFusion->processFrame(rgbImage, (unsigned short *) depth_full.data, weightedImagePyramid, im_count, &(poseEFCoords), 1);
+
+            poseEF = ef.eFusion->getCurrPose() * ef.fromVisToNom;
+            poseEFMrptMat =  mrpt::math::CMatrixDouble44(poseEF);
+            cf.ef_cam_pose = mrpt::poses::CPose3D(poseEFMrptMat);
 
             ef.updateGUI();
 
 
+
+
             cf.createImagesOfSegmentations();
 			if (save_results)
-				dataset.writeTrajectoryFile(cf.cam_pose, cf.ddt);
-            anything_new = 1;
-
-
-
-
-			break;
-
-        //Turn on/off continuous estimation
-        case 's':
-            continuous_exec = !continuous_exec;
-            break;
-		
-		//Close the program
-		case 'e':
-			stop = 1;
-			break;
-		}
-
-        if (continuous_exec)
-        {
-            dataset.loadFrameAndPoseFromDataset(cf.depth_wf, cf.intensity_wf, cf.im_r, cf.im_g, cf.im_b, depth_full, color_full);
-            cf.run_VO_SF(true);
-            cf.createImagesOfSegmentations();
-			if (save_results)
-				dataset.writeTrajectoryFile(cf.cam_pose, cf.ddt);
+                dataset.writeTrajectoryFile(cf.ef_cam_pose, cf.ddt);
             anything_new = 1;
 
 			if (dataset.dataset_finished)
@@ -219,7 +328,7 @@ int main()
 		if (anything_new)
 		{
 			bool aux = false;
-			cf.updateSceneDatasets(dataset.gt_pose, dataset.gt_oldpose);
+            cf.updateSceneDatasets(dataset.gt_pose, dataset.gt_oldpose);
 			anything_new = 0;
 		}
 	}

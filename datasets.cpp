@@ -31,9 +31,9 @@ using namespace std;
 Datasets::Datasets(unsigned int res_factor)
 {
     downsample = res_factor; // (1 - 640 x 480, 2 - 320 x 240)
-	max_distance = 6.f;
+    max_distance = 6.f;
 	dataset_finished = false;
-	rawlog_count = 0;
+    rawlog_count = 0;
 }
 
 void Datasets::openRawlog()
@@ -83,7 +83,7 @@ void Datasets::openRawlog()
 	last_gt_row = 0;
 }
 
-void Datasets::loadFrameAndPoseFromDataset(Eigen::MatrixXf &depth_wf, Eigen::MatrixXf &intensity_wf, Eigen::MatrixXf &im_r, Eigen::MatrixXf &im_g, Eigen::MatrixXf &im_b, cv::Mat depth_full, cv::Mat color_full)
+void Datasets::loadFrameAndPoseFromDataset(Eigen::MatrixXf &depth_wf, Eigen::MatrixXf &intensity_wf, Eigen::MatrixXf &im_r, Eigen::MatrixXf &im_g, Eigen::MatrixXf &im_b, cv::Mat & depth_full, cv::Mat & color_full)
 {
 	if (dataset_finished)
 	{
@@ -97,7 +97,7 @@ void Datasets::loadFrameAndPoseFromDataset(Eigen::MatrixXf &depth_wf, Eigen::Mat
 
 	while (!IS_CLASS(alfa, CObservation3DRangeScan))
 	{
-		rawlog_count++;
+       rawlog_count++;
 		if (dataset.size() <= rawlog_count)
 		{
 			dataset_finished = true;
@@ -123,15 +123,17 @@ void Datasets::loadFrameAndPoseFromDataset(Eigen::MatrixXf &depth_wf, Eigen::Mat
 	for (unsigned int j = 0; j<cols; j++)
 		for (unsigned int i = 0; i<rows; i++)
 		{
-			intensity_wf(i,j) = intensity(height-downsample*i-1, width-downsample*j-1);
 			const float z = range(height-downsample*i-1, width-downsample*j-1);
-			if (z < max_distance)	depth_wf(i,j) = z;
+            if (z < max_distance)	depth_wf(i,j) = z ;
 			else					depth_wf(i,j) = 0.f;
 
 			//Color image, just for the visualization
 			im_r(i,j) = b(height-downsample*i-1, width-downsample*j-1);
 			im_g(i,j) = g(height-downsample*i-1, width-downsample*j-1);
 			im_b(i,j) = r(height-downsample*i-1, width-downsample*j-1);
+
+            intensity_wf(i,j) = 0.299f* im_r(i,j) + 0.587f*im_g(i,j) + 0.114f*im_b(i,j); //intensity(height-downsample*i-1, width-downsample*j-1);
+
         }
 
 
@@ -149,7 +151,7 @@ void Datasets::loadFrameAndPoseFromDataset(Eigen::MatrixXf &depth_wf, Eigen::Mat
 	timestamp_obs = mrpt::system::timestampTotime_t(obs3D->timestamp);
 
 	obs3D->unload();
-	rawlog_count++;
+    rawlog_count++;
 
 	if (dataset.size() <= rawlog_count)
 		dataset_finished = true;
@@ -237,6 +239,13 @@ void Datasets::writeTrajectoryFile(poses::CPose3D &cam_pose, Eigen::MatrixXf &dd
 	}
 }
 
-
-
-
+void Datasets::writeTwistsToFile(Vector6f twist, Eigen::MatrixXf &ddt)
+{
+    //Don't take into account those iterations with consecutive equal depth images
+    if (abs(ddt.sumAll()) > 0)
+    {
+        char aux[24];
+        sprintf(aux,"%.04f", timestamp_obs);
+        f_res << aux << " " << twist[0]<<" "<<twist[1]<<" "<<twist[2]<<" "<<twist[3]<<" "<<twist[4]<<" "<<twist[5]<<"\n";
+    }
+}

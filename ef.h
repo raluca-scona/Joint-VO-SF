@@ -37,23 +37,23 @@ public:
 
     EF_Container() {
 
-        //various params and thresholds
-        icpCountThresh = 40000;
-        icpErrThresh = 5e-05;
-        covThresh = 1e-05;
-        openLoop = false;
+        icpCountThresh = 5000; //10000;
+        icpErrThresh = 5e-01;
+        covThresh = 1e-03;
+
+        openLoop = true;
         iclnuim = false;
-        reloc = true;
+        reloc = false;
         photoThresh = 115;
-        confidence = 2.0f;
-        depth = 5.0f; //usually 3.5m
+        confidence = 2.4f; //5.0f;
+        depth = 3.0f; //usually 3.5m
         icp = 10.0f;
         fastOdom = false;
         fernThresh = 0.3095f;
         so3 = true; //remember to update this
         frameToFrameRGB = false;
         std::string fileName = "cf-mesh";
-        timeDelta = 200;
+        timeDelta = 600;
 
         fromNomToVis = Eigen::Matrix4f::Zero();
         fromVisToNom = Eigen::Matrix4f::Zero();
@@ -244,5 +244,5 @@ public:
 
 };
 
-#endif // EF
+#endif
 
