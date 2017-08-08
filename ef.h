@@ -46,7 +46,7 @@ public:
         reloc = false;
         photoThresh = 115;
         confidence = 2.4f; //5.0f;
-        depth = 3.0f; //usually 3.5m
+        depth = 6.0f; //usually 3.5m
         icp = 10.0f;
         fastOdom = false;
         fernThresh = 0.3095f;
@@ -66,8 +66,8 @@ public:
 
         fromVisToNom = fromNomToVis.inverse();
 
-        Resolution::getInstance(640, 480);
-        Intrinsics::getInstance(528, 528, 320, 240);
+        Resolution::getInstance(640/2, 480/2);
+        Intrinsics::getInstance(528/2, 528/2, 320/2, 240/2);
 
         gui = new GUI(fileName.length() == 0, false);
 

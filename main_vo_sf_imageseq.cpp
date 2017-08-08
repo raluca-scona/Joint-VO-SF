@@ -62,8 +62,6 @@ int main()
     std::chrono::high_resolution_clock::time_point efProcessFrame1;
 
     cv::Mat weightedImageColumnMajor;
-    cv::Mat fullSizeWeightedImage;
-    cv::Mat smallestWeightedImage;
     cv::Mat weightedImage;
 
     std::vector<float> level0WeightedImage (Resolution::getInstance().width() * Resolution::getInstance().height(), 0.0);
@@ -85,16 +83,10 @@ int main()
 
     rgbImage = cf.color_full.data;
 
-    for(int i = 0; i < 640 * 480 * 3; i += 3)
-    {
-        std::swap(rgbImage[i + 0], rgbImage[i + 2]);   //flipping the colours for EF
-    }
-
-    // Initialise a weighted pyramid with zero
+    Eigen::Matrix4f initPose = Eigen::Matrix4f::Identity();
 
     //Initialise model in EF to the first frame we get
-    ef.eFusion->processFrame(rgbImage, (unsigned short *) cf.depth_full.data, (float *) level0WeightedImage.data() , im_count, 0 , 1);
-
+    ef.eFusion->processFrame(rgbImage, (unsigned short *) cf.depth_full.data, (float *) level0WeightedImage.data() , im_count, &(initPose), 1);
 
 	//Create the 3D Scene
 	cf.initializeSceneImageSeq();
@@ -129,13 +121,13 @@ int main()
             for (unsigned int v=0; v<cf.height; v++) {
                 for (unsigned int u=0; u<cf.width; u++)
                 {
-                    cv::Vec3b color_here = colorPrediction.at<cv::Vec3b>(res_factor*v, res_factor*u);
+                    cv::Vec3b color_here = colorPrediction.at<cv::Vec3b>(v, u);
                     cf.im_r_old(v,u) = norm_factor*color_here[0];
                     cf.im_g_old(v,u) = norm_factor*color_here[1];
                     cf.im_b_old(v,u) = norm_factor*color_here[2];
                     cf.intensity_wf_old(v,u) = 0.299f* cf.im_r_old(v,u) + 0.587f*cf.im_g_old(v,u) + 0.114f*cf.im_b_old(v,u);
 
-                    cf.depth_wf_old(v,u) = depthPrediction.at<float>(res_factor*v, res_factor*u);
+                    cf.depth_wf_old(v,u) = depthPrediction.at<float>(v, u);
                 }
             }
 
@@ -144,22 +136,15 @@ int main()
             cf.run_VO_SF(true); //run algorithm using pyramid for new images
             poseEFCoords = ef.fromVisToNom * cf.T_odometry * ef.fromNomToVis; //EF uses the coordinate frame with Z forwards, Y upwards
 
-            weightedImageColumnMajor = cv::Mat(320, 240, CV_32F, cf.b_segm_image_warped.data()); //Eigen returns data in column-major
+            weightedImageColumnMajor = cv::Mat(cf.width, cf.height, CV_32F, cf.b_segm_image_warped.data()); //Eigen returns data in column-major
             //When running in this mode, images are flipped upside down. If I want to pass them in their original orientation, I need to do flip them.
             //Now I am just passing them as they have been preprocessed in CF, so upside down.
             //cv::flip(weightedImageColumnMajor, weightedImage, 1);
-            weightedImage = weightedImageColumnMajor;
-            cv::transpose(weightedImage, weightedImage);  //stored in row major order
-            cv::resize(weightedImage, fullSizeWeightedImage,  cv::Size(640, 480) , 0,0);  //resize to full image
+            cv::transpose(weightedImageColumnMajor, weightedImage);  //stored in row major order
 
             rgbImage = cf.color_full.data;
 
-            for(int i = 0; i < 640 * 480 * 3; i += 3)
-            {
-                std::swap(rgbImage[i + 0], rgbImage[i + 2]);   //get the colour image of the latest frame
-            }
-
-            ef.eFusion->processFrame(rgbImage, (unsigned short *) cf.depth_full.data, (float *) fullSizeWeightedImage.data, im_count, &(poseEFCoords), 1);
+            ef.eFusion->processFrame(rgbImage, (unsigned short *) cf.depth_full.data, (float *) weightedImage.data, im_count, &(poseEFCoords), 1);
 
             efProcessFrame1 = std::chrono::high_resolution_clock::now();
 
@@ -186,9 +171,49 @@ int main()
 	
 		if ((continuous_exec)&&(!stop))
 		{
-			im_count += decimation;
-			stop = cf.loadImageFromSequence(dir, im_count, res_factor);
-            cf.run_VO_SF(true);
+            im_count += decimation;
+
+            stop = cf.loadImageFromSequence(dir, im_count, res_factor);
+
+
+            //Got images from the model, should overwrite the old images and re-do the pyramid
+            ef.eFusion->getPredictedImages(colorPrediction, depthPrediction, weightPrediction);
+
+            //overwriting the previous colour and depth images
+            for (unsigned int v=0; v<cf.height; v++) {
+                for (unsigned int u=0; u<cf.width; u++)
+                {
+                    cv::Vec3b color_here = colorPrediction.at<cv::Vec3b>(v, u);
+                    cf.im_r_old(v,u) = norm_factor*color_here[0];
+                    cf.im_g_old(v,u) = norm_factor*color_here[1];
+                    cf.im_b_old(v,u) = norm_factor*color_here[2];
+                    cf.intensity_wf_old(v,u) = 0.299f* cf.im_r_old(v,u) + 0.587f*cf.im_g_old(v,u) + 0.114f*cf.im_b_old(v,u);
+
+                    cf.depth_wf_old(v,u) = depthPrediction.at<float>(v, u);
+                }
+            }
+
+
+
+
+            cf.createImagePyramid(true);   //pyramid for the old model
+
+            cf.run_VO_SF(true); //run algorithm using pyramid for new images
+            poseEFCoords = ef.fromVisToNom * cf.T_odometry * ef.fromNomToVis; //EF uses the coordinate frame with Z forwards, Y upwards
+
+            weightedImageColumnMajor = cv::Mat(cf.width, cf.height, CV_32F, cf.b_segm_image_warped.data()); //Eigen returns data in column-major
+            //When running in this mode, images are flipped upside down. If I want to pass them in their original orientation, I need to do flip them.
+            //Now I am just passing them as they have been preprocessed in CF, so upside down.
+            //cv::flip(weightedImageColumnMajor, weightedImage, 1);
+            cv::transpose(weightedImageColumnMajor, weightedImage);  //stored in row major order
+
+            rgbImage = cf.color_full.data;
+
+            ef.eFusion->processFrame(rgbImage, (unsigned short *) cf.depth_full.data, (float *) weightedImage.data, im_count, &(poseEFCoords), 1);
+
+            efProcessFrame1 = std::chrono::high_resolution_clock::now();
+
+            ef.updateGUI();
             cf.createImagesOfSegmentations();
 			cf.updateSceneImageSeq();
 		}

@@ -50,13 +50,10 @@ int main()
     EF_Container ef;
 
     cv::Mat weightedImageColumnMajor;
-    cv::Mat fullSizeWeightedImage;
-    cv::Mat smallestWeightedImage;
     cv::Mat weightedImage;
 
     std::vector<float> level0WeightedImage (Resolution::getInstance().width() * Resolution::getInstance().height(), 0.0);
 
-    //std::vector<float> weightedImageVector;
     unsigned char * rgbImage;
 
     cv::Mat colorPrediction = cv::Mat(Resolution::getInstance().height(), Resolution::getInstance().width(), CV_8UC3,  cv::Scalar(0,0,0));
@@ -89,14 +86,14 @@ int main()
 	VO_SF cf(res_factor);
 	Datasets dataset(res_factor);
 
-    cv::Mat depth_full = cv::Mat(cf.height * res_factor, cf.width * res_factor,  CV_16U, 0.0);
-    cv::Mat color_full = cv::Mat(cf.height * res_factor, cf.width * res_factor,  CV_8UC3,  cv::Scalar(0,0,0));
+    cv::Mat depth_full = cv::Mat(cf.height, cf.width,  CV_16U, 0.0);
+    cv::Mat color_full = cv::Mat(cf.height, cf.width,  CV_8UC3,  cv::Scalar(0,0,0));
 
 	//Set dir of the Rawlog file
-  //  dataset.filename = "/usr/prakt/p025/datasets/tum-benchmark-mrpt/rawlog_rgbd_dataset_freiburg3_walking_static/rgbd_dataset_freiburg3_walking_static.rawlog";
-  //  dataset.filename = "/usr/prakt/p025/datasets/tum-benchmark-mrpt/rawlog_rgbd_dataset_freiburg3_walking_xyz/rgbd_dataset_freiburg3_walking_xyz.rawlog";
+ //  dataset.filename = "/usr/prakt/p025/datasets/tum-benchmark-mrpt/rawlog_rgbd_dataset_freiburg3_walking_static/rgbd_dataset_freiburg3_walking_static.rawlog";
+ //  dataset.filename = "/usr/prakt/p025/datasets/tum-benchmark-mrpt/rawlog_rgbd_dataset_freiburg3_walking_xyz/rgbd_dataset_freiburg3_walking_xyz.rawlog";
 
-  //  dataset.filename = "/usr/prakt/p025/datasets/tum-benchmark-mrpt/rawlog_rgbd_dataset_freiburg2_desk_with_person/rgbd_dataset_freiburg2_desk_with_person.rawlog";
+ // dataset.filename = "/usr/prakt/p025/datasets/tum-benchmark-mrpt/rawlog_rgbd_dataset_freiburg2_desk_with_person/rgbd_dataset_freiburg2_desk_with_person.rawlog";
     dataset.filename = "/usr/prakt/p025/datasets/tum-benchmark-mrpt/rawlog_rgbd_dataset_freiburg1_desk/rgbd_dataset_freiburg1_desk.rawlog"; //ok
 
 	//Create the 3D Scene
@@ -126,10 +123,6 @@ int main()
     poseEFInit =  poseEFInit * ef.fromNomToVis;
 
     rgbImage = color_full.data;
-    for(int i = 0; i < 640 * 480 * 3; i += 3)
-    {
-        std::swap(rgbImage[i + 0], rgbImage[i + 2]);   //flipping the colours for EF
-    }
 
     //Initialise model in EF to the first frame we get
     ef.eFusion->processFrame(rgbImage, (unsigned short *) depth_full.data,  (float *) level0WeightedImage.data() , im_count, &(poseEFInit) , 1);
@@ -161,13 +154,12 @@ int main()
             for (unsigned int v=0; v<cf.height; v++) {
                 for (unsigned int u=0; u<cf.width; u++)
                 {
-                    cv::Vec3b color_here = colorPrediction.at<cv::Vec3b>(res_factor*v, res_factor*u);
+                    cv::Vec3b color_here = colorPrediction.at<cv::Vec3b>(v, u);
                     cf.im_r_old(v,u) = norm_factor*color_here[0];
                     cf.im_g_old(v,u) = norm_factor*color_here[1];
                     cf.im_b_old(v,u) = norm_factor*color_here[2];
                     cf.intensity_wf_old(v,u) = 0.299f* cf.im_r_old(v,u) + 0.587f*cf.im_g_old(v,u) + 0.114f*cf.im_b_old(v,u);
-
-                    cf.depth_wf_old(v,u) = depthPrediction.at<float>(res_factor*v, res_factor*u);
+                    cf.depth_wf_old(v,u) = depthPrediction.at<float>(v, u);
 
                 }
             }
@@ -181,20 +173,13 @@ int main()
 
             rgbImage = color_full.data;
 
-            for(int i = 0; i < 640 * 480 * 3; i += 3)
-            {
-                std::swap(rgbImage[i + 0], rgbImage[i + 2]);   //get the colour image of the latest frame
-            }
-
             cf.run_VO_SF(true);
 
-            weightedImageColumnMajor = cv::Mat(320, 240, CV_32F, cf.b_segm_image_warped.data()); //Eigen returns data in column-major
+            weightedImageColumnMajor = cv::Mat(cf.width, cf.height, CV_32F, cf.b_segm_image_warped.data()); //Eigen returns data in column-major
             //When running in this mode, images are flipped upside down. If I want to pass them in their original orientation, I need to do flip them.
             //Now I am just passing them as they have been preprocessed in CF, so upside down.
             //cv::flip(weightedImageColumnMajor, weightedImage, 1);
-            weightedImage = weightedImageColumnMajor;
-            cv::transpose(weightedImage, weightedImage);  //stored in row major order
-            cv::resize(weightedImage, fullSizeWeightedImage,  cv::Size(640, 480) , 0,0);  //resize to full image
+            cv::transpose(weightedImageColumnMajor, weightedImage);  //stored in row major order
 
             poseEFCoords = ef.fromVisToNom * cf.T_odometry * ef.fromNomToVis; //EF uses the coordinate frame with Z forwards, Y upwards
 
@@ -203,7 +188,7 @@ int main()
             cf.ef_cam_oldpose = mrpt::poses::CPose3D(poseEFMrptMat);
 
             //pyramid will no longer be needed because we use cf for tracking anyway
-            ef.eFusion->processFrame(rgbImage, (unsigned short *) depth_full.data, (float *) fullSizeWeightedImage.data, im_count, &(poseEFCoords), 1);
+            ef.eFusion->processFrame(rgbImage, (unsigned short *) depth_full.data, (float *) weightedImage.data, im_count, &(poseEFCoords), 1);
 
             poseEF = ef.eFusion->getCurrPose() * ef.fromVisToNom;
             poseEFMrptMat =  mrpt::math::CMatrixDouble44(poseEF);
@@ -246,13 +231,13 @@ int main()
             for (unsigned int v=0; v<cf.height; v++) {
                 for (unsigned int u=0; u<cf.width; u++)
                 {
-                    cv::Vec3b color_here = colorPrediction.at<cv::Vec3b>(res_factor*v, res_factor*u);
+                    cv::Vec3b color_here = colorPrediction.at<cv::Vec3b>(v, u);
                     cf.im_r_old(v,u) = norm_factor*color_here[0];
                     cf.im_g_old(v,u) = norm_factor*color_here[1];
                     cf.im_b_old(v,u) = norm_factor*color_here[2];
                     cf.intensity_wf_old(v,u) = 0.299f* cf.im_r_old(v,u) + 0.587f*cf.im_g_old(v,u) + 0.114f*cf.im_b_old(v,u);
 
-                   cf.depth_wf_old(v,u) = depthPrediction.at<float>(res_factor*v, res_factor*u) ;
+                   cf.depth_wf_old(v,u) = depthPrediction.at<float>(v, u) ;
                 }
             }
 
@@ -266,26 +251,19 @@ int main()
 
             poseEFCoords = ef.fromVisToNom * cf.T_odometry * ef.fromNomToVis; //EF uses the coordinate frame with Z forwards, Y upwards
 
-            weightedImageColumnMajor = cv::Mat(320, 240, CV_32F, cf.b_segm_image_warped.data()); //Eigen returns data in column-major
+            weightedImageColumnMajor = cv::Mat(cf.width, cf.height, CV_32F, cf.b_segm_image_warped.data()); //Eigen returns data in column-major
             //When running in this mode, images are flipped upside down. If I want to pass them in their original orientation, I need to do flip them.
             //Now I am just passing them as they have been preprocessed in CF, so upside down.
             //cv::flip(weightedImageColumnMajor, weightedImage, 1);
-            weightedImage = weightedImageColumnMajor;
-            cv::transpose(weightedImage, weightedImage);  //stored in row major order
-            cv::resize(weightedImage, fullSizeWeightedImage,  cv::Size(640, 480) , 0,0);  //resize to full image
+            cv::transpose(weightedImageColumnMajor, weightedImage);  //stored in row major order
 
             rgbImage = color_full.data;
-
-            for(int i = 0; i < 640 * 480 * 3; i += 3)
-            {
-                std::swap(rgbImage[i + 0], rgbImage[i + 2]);   //get the colour image of the latest frame
-            }
 
             poseEF = ef.eFusion->getCurrPose() * ef.fromVisToNom;
             poseEFMrptMat =  mrpt::math::CMatrixDouble44(poseEF);
             cf.ef_cam_oldpose = mrpt::poses::CPose3D(poseEFMrptMat);
 
-            ef.eFusion->processFrame(rgbImage, (unsigned short *) depth_full.data,   (float *) fullSizeWeightedImage.data, im_count, &(poseEFCoords), 1);
+            ef.eFusion->processFrame(rgbImage, (unsigned short *) depth_full.data,   (float *) weightedImage.data, im_count, &(poseEFCoords), 1);
 
             poseEF = ef.eFusion->getCurrPose() * ef.fromVisToNom;
             poseEFMrptMat =  mrpt::math::CMatrixDouble44(poseEF);

@@ -124,8 +124,13 @@ void Datasets::loadFrameAndPoseFromDataset(Eigen::MatrixXf &depth_wf, Eigen::Mat
 		for (unsigned int i = 0; i<rows; i++)
 		{
 			const float z = range(height-downsample*i-1, width-downsample*j-1);
-            if (z < max_distance)	depth_wf(i,j) = z ;
-			else					depth_wf(i,j) = 0.f;
+            if (z < max_distance) {
+                depth_wf(i,j) = z ;
+                depth_full.at<unsigned short>(i,j) = z * 1000.0;
+            } else {
+                depth_wf(i,j) = 0.f;
+                depth_full.at<unsigned short>(i,j) = 0.f;
+            }
 
 			//Color image, just for the visualization
 			im_r(i,j) = b(height-downsample*i-1, width-downsample*j-1);
@@ -133,20 +138,10 @@ void Datasets::loadFrameAndPoseFromDataset(Eigen::MatrixXf &depth_wf, Eigen::Mat
 			im_b(i,j) = r(height-downsample*i-1, width-downsample*j-1);
 
             intensity_wf(i,j) = 0.299f* im_r(i,j) + 0.587f*im_g(i,j) + 0.114f*im_b(i,j); //intensity(height-downsample*i-1, width-downsample*j-1);
+            color_full.at<cv::Vec3b>(i,j) = cv::Vec3b( im_r(i,j) * 255, im_g(i,j)* 255, im_b(i,j) * 255);
+
 
         }
-
-
-    for (unsigned int j = 0; j<width; j++)
-        for (unsigned int i = 0; i<height; i++)
-        {
-            const float z = range(height-i-1, width-j-1);
-            if (z < max_distance)	depth_full.at<unsigned short>(i,j) = z * 1000.0;
-            else					depth_full.at<unsigned short>(i,j) = 0.f;
-
-            color_full.at<cv::Vec3b>(i,j) = cv::Vec3b( r(height-i-1, width-j-1) * 255, g(height-i-1, width-j-1)* 255, b(height-i-1, width-j-1)* 255);
-        }
-
 
 	timestamp_obs = mrpt::system::timestampTotime_t(obs3D->timestamp);
 

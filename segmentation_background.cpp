@@ -190,7 +190,6 @@ void VO_SF::optimizeSegmentation(Matrix<float, NUM_LABELS, 1> &r)
 	for (unsigned int l=0; l<NUM_LABELS; l++)
 	{
 
-
         label_static[l] = true;
         label_dynamic[l] = false;
         b_segm[l] = 0.f;

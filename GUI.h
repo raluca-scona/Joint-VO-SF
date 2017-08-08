@@ -68,7 +68,7 @@ class GUI
             glDepthMask(GL_TRUE);
             glDepthFunc(GL_LESS);
 
-            s_cam = pangolin::OpenGlRenderState(pangolin::ProjectionMatrix(640, 480, 420, 420, 320, 240, 0.1, 1000),
+            s_cam = pangolin::OpenGlRenderState(pangolin::ProjectionMatrix(640/2, 480/2, 420/2, 420/2, 320/2, 240/2, 0.1, 1000),
                                                 pangolin::ModelViewLookAt(0, 0, -1, 0, 0, 1, pangolin::AxisNegY));
 
             pangolin::Display("cam").SetBounds(0, 1.0f, 0, 1.0f, -640 / 480.0)

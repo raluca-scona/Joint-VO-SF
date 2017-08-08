@@ -129,6 +129,9 @@ VO_SF::VO_SF(unsigned int res_factor) : ws_foreground(3*640*480/(2*res_factor*re
 		backg_image[c].resize(rows,cols);
         labels_image[c].resize(rows,cols);
 	}
+
+    depth_full = cv::Mat(height, width ,  CV_16U, 0.0);
+    color_full = cv::Mat(height, width ,  CV_8UC3,  cv::Scalar(0,0,0));
 }
 
 void VO_SF::loadImagePairFromFiles(string files_dir, unsigned int res_factor)
@@ -194,7 +197,6 @@ bool VO_SF::loadImageFromSequence(string files_dir, unsigned int index, unsigned
     string name = files_dir + aux;
 
 	cv::Mat color = cv::imread(name.c_str(), CV_LOAD_IMAGE_COLOR);
-    color_full = cv::imread(name.c_str(), CV_LOAD_IMAGE_COLOR);
 
 	if (color.data == NULL)
 	{
@@ -210,14 +212,8 @@ bool VO_SF::loadImageFromSequence(string files_dir, unsigned int index, unsigned
 			im_g(height-1-v,u) = norm_factor*color_here[1];
 			im_b(height-1-v,u) = norm_factor*color_here[0];
 			intensity_wf(height-1-v,u) = 0.299f*im_r(height-1-v,u) + 0.587f*im_g(height-1-v,u) + 0.114f*im_b(height-1-v,u);
+            color_full.at<cv::Vec3b>(height-1-v,u) = cv::Vec3b( im_r(height-1-v,u) * 255, im_g(height-1-v,u) * 255, im_b(height-1-v,u) * 255);
 		}
-
-    for (unsigned int v=0; v<height * res_factor; v++)
-        for (unsigned int u=0; u<width * res_factor; u++)
-        {
-            cv::Vec3b color_here = color.at<cv::Vec3b>(v, u);
-            color_full.at<cv::Vec3b>(height * res_factor - 1 - v, u) = color_here;
-        }
 
     sprintf(aux, "d%d.png", index);
     name = files_dir + aux;
@@ -227,15 +223,11 @@ bool VO_SF::loadImageFromSequence(string files_dir, unsigned int index, unsigned
     cv::Mat depth_float_mm;
     depth.convertTo(depth_float, CV_32FC1, 1.0 / 5000.0);
     depth.convertTo(depth_float_mm, CV_16U, 1000.0 / 5000.0);
-    depth.convertTo(depth_full, CV_16U, 1000.0 / 5000.0);
 
     for (unsigned int v=0; v<height; v++)
-        for (unsigned int u=0; u<width; u++)
+        for (unsigned int u=0; u<width; u++) {
             depth_wf(height-1-v,u) = depth_float.at<float>(res_factor*v,res_factor*u);
-
-    for (unsigned int v=0; v<height * res_factor; v++)
-        for (unsigned int u=0; u<width* res_factor; u++) {
-            depth_full.at<unsigned short>(height * res_factor -1 -v, u) = depth_float_mm.at<unsigned short>(v,u);
+            depth_full.at<unsigned short>(height-1-v,u) = depth_float_mm.at<unsigned short>(res_factor*v,res_factor*u);
         }
 
 	return false;

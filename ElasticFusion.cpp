@@ -323,7 +323,7 @@ void ElasticFusion::processFrame(const unsigned char * rgb,
 
     std::vector<unsigned char> weightedImageTexture (Resolution::getInstance().width() * Resolution::getInstance().height() * 3, 0.0);
 
-    for (unsigned int i=0; i< 640*480 ; i++) {
+    for (int i=0; i< Resolution::getInstance().numPixels(); i++) {
         weightedImageTexture[i*3 + 0] = (unsigned char) (255 * weightedImage[i]);
         weightedImageTexture[i*3 + 1] = (unsigned char) (255 * weightedImage[i]);
         weightedImageTexture[i*3 + 2] = (unsigned char) (255 * weightedImage[i]);
